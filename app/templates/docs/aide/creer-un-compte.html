@@ -5,17 +5,25 @@
 <h1>Créer un compte</h1>
 
 <p>
-  Les comptes Nexus sont actuellement créés par l'administrateur de votre organisation, et non via une inscription
-  publique. Si vous devez accéder à une application protégée par Nexus, contactez votre administrateur pour qu'il
-  crée votre compte.
+  Vous pouvez créer votre compte Nexus vous-même, sans intervention d'un administrateur, depuis la page
+  <a href="{{ url_for('auth.register') }}" style="color:var(--blue-400);">Créer un compte</a> (accessible aussi
+  depuis la page d'accueil et la page de connexion).
 </p>
 
-<h2>Une fois votre compte créé</h2>
+<h2>Étapes de l'inscription</h2>
 <ol>
-  <li>Vous recevez votre adresse e-mail et un mot de passe temporaire de la part de votre administrateur</li>
-  <li>Connectez-vous sur la page de connexion de Nexus</li>
-  <li>Nous recommandons d'activer immédiatement la <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400);">double authentification (2FA)</a></li>
+  <li>Renseignez un nom d'utilisateur, votre adresse e-mail et un mot de passe (8 caractères minimum)</li>
+  <li>Un e-mail de confirmation vous est envoyé — le lien est valable 24 heures</li>
+  <li>Cliquez sur ce lien pour activer votre compte : tant qu'il n'est pas confirmé, la connexion reste bloquée</li>
+  <li>Connectez-vous, puis nous recommandons d'activer immédiatement la
+    <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400);">double authentification (2FA)</a></li>
 </ol>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Un administrateur peut aussi créer un compte pour vous depuis le panneau d'administration — dans ce cas,
+  aucune confirmation d'e-mail n'est nécessaire, le compte est actif immédiatement.</span>
+</div>
 
 <div class="docs-callout">
   <i class="fas fa-circle-info"></i>
