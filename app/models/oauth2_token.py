@@ -77,6 +77,13 @@ class OAuth2Token(db.Model):
         nullable=False,
         comment="bcrypt hash du refresh token",
     )
+    # SHA256 hex du refresh token — index de recherche O(1) (pas de valeur en clair)
+    token_sha256: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="SHA256 hex du refresh token brut (lookup rapide avant bcrypt verify)",
+    )
     scope: Mapped[str] = mapped_column(Text, nullable=False)
     # JTI du dernier access token émis avec ce refresh token
     access_token_jti: Mapped[str] = mapped_column(

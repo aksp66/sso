@@ -1,9 +1,13 @@
+import hashlib
 import jwt
 from datetime import datetime, timezone, timedelta
 from app.extensions import bcrypt
 
 def test_revoke_access_token(client, test_user, test_client, app):
     with app.app_context():
+        from app.extensions import get_redis
+        get_redis().delete('blacklist:test-jti-123')
+
         from app.services.key_service import KeyService
         key = KeyService.get_active_key()
         private_key = KeyService.decrypt_private_key(key.private_key_encrypted, app.config['AES_ENCRYPTION_KEY'])
@@ -42,11 +46,13 @@ def test_revoke_refresh_token(client, test_user, test_client, db, app):
 
     refresh_token_value = "test-refresh-123"
     refresh_hash = bcrypt.generate_password_hash(refresh_token_value).decode('utf-8')
+    refresh_sha256 = hashlib.sha256(refresh_token_value.encode()).hexdigest()
     rt = OAuth2Token(
         jti=str(uuid.uuid4()),
         user_id=test_user.id,
         client_id=test_client.client_id,
         token_hash=refresh_hash,
+        token_sha256=refresh_sha256,
         scope="openid email",
         access_token_jti="test-at-jti",
         expires_at=datetime.now(timezone.utc) + timedelta(days=30)

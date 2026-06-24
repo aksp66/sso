@@ -254,12 +254,14 @@ def token():
         refresh_jti = str(uuid.uuid4())
         refresh_token_value = base64.urlsafe_b64encode(os.urandom(40)).decode().rstrip('=')
         refresh_hash = bcrypt.generate_password_hash(refresh_token_value).decode('utf-8')
+        refresh_sha256 = hashlib.sha256(refresh_token_value.encode()).hexdigest()
         refresh_exp = datetime.now(timezone.utc) + timedelta(seconds=current_app.config['REFRESH_TOKEN_EXPIRE_SECONDS'])
         refresh_token = OAuth2Token(
             jti=refresh_jti,
             user_id=user.id,
             client_id=client.client_id,
             token_hash=refresh_hash,
+            token_sha256=refresh_sha256,
             scope=auth_code.scope,
             access_token_jti=jwt.decode(access_token, options={'verify_signature': False})['jti'],
             issued_at=datetime.now(timezone.utc),
@@ -290,13 +292,13 @@ def token():
         refresh_token_value = request.form.get('refresh_token')
         if not refresh_token_value:
             return jsonify({'error': 'invalid_request'}), 400
-        # Recherche du refresh token parmi ceux du client (vérification bcrypt)
-        candidates = OAuth2Token.query.filter_by(client_id=client.client_id).all()
-        found = None
-        for candidate in candidates:
-            if bcrypt.check_password_hash(candidate.token_hash, refresh_token_value):
-                found = candidate
-                break
+        # Lookup O(1) par SHA256, puis vérification bcrypt sur l'unique candidat
+        lookup_sha256 = hashlib.sha256(refresh_token_value.encode()).hexdigest()
+        found = OAuth2Token.query.filter_by(
+            client_id=client.client_id, token_sha256=lookup_sha256
+        ).first()
+        if found and not bcrypt.check_password_hash(found.token_hash, refresh_token_value):
+            found = None
         if not found or not found.is_active():
             return jsonify({'error': 'invalid_grant'}), 400
         # Rotation : révoquer l'ancien et créer un nouveau
@@ -314,11 +316,13 @@ def token():
         new_refresh_jti = str(uuid.uuid4())
         new_refresh_value = base64.urlsafe_b64encode(os.urandom(40)).decode().rstrip('=')
         new_refresh_hash = bcrypt.generate_password_hash(new_refresh_value).decode('utf-8')
+        new_refresh_sha256 = hashlib.sha256(new_refresh_value.encode()).hexdigest()
         new_refresh = OAuth2Token(
             jti=new_refresh_jti,
             user_id=user.id,
             client_id=client.client_id,
             token_hash=new_refresh_hash,
+            token_sha256=new_refresh_sha256,
             scope=found.scope,
             access_token_jti=jwt.decode(new_access_token, options={'verify_signature': False})['jti'],
             issued_at=datetime.now(timezone.utc),
@@ -396,12 +400,13 @@ def revoke():
             except (jwt.DecodeError, KeyError):
                 pass
         else:  # refresh_token
-            candidates = OAuth2Token.query.filter_by(client_id=client.client_id).all()
-            for candidate in candidates:
-                if bcrypt.check_password_hash(candidate.token_hash, token):
-                    candidate.revoked_at = datetime.now(timezone.utc)
-                    db.session.commit()
-                    break
+            revoke_sha256 = hashlib.sha256(token.encode()).hexdigest()
+            rt = OAuth2Token.query.filter_by(
+                client_id=client.client_id, token_sha256=revoke_sha256
+            ).first()
+            if rt and bcrypt.check_password_hash(rt.token_hash, token):
+                rt.revoked_at = datetime.now(timezone.utc)
+                db.session.commit()
     return jsonify({}), 200
 
 @oauth2_bp.route('/callback')
