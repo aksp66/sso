@@ -341,7 +341,7 @@ def userinfo():
     try:
         payload = _verify_bearer_token(token)
     except BadRequest as e:
-        return jsonify({'error': 'invalid_token', 'description': str(e)}), 401
+        return jsonify({'error': 'invalid_token', 'description': str(e)}), 400
     user = User.query.get(uuid.UUID(payload['sub']))
     if not user:
         return jsonify({'error': 'invalid_token'}), 401
@@ -385,7 +385,7 @@ def revoke():
                 if jti:
                     redis = get_redis()
                     redis.setex(f'blacklist:{jti}', 3600, '1')
-            except:
+            except (jwt.DecodeError, KeyError):
                 pass
         else:  # refresh_token
             candidates = OAuth2Token.query.filter_by(client_id=client.client_id).all()

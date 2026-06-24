@@ -2,6 +2,7 @@ import base64
 import os
 
 from dotenv import load_dotenv
+from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
@@ -76,6 +77,8 @@ class TestingConfig(Config):
     )
     BCRYPT_LOG_ROUNDS = 4
     WTF_CSRF_ENABLED = False
+    # NullPool : aucun pool de connexions en tests.
+    SQLALCHEMY_ENGINE_OPTIONS = {"poolclass": NullPool}
 
 
 class ProductionConfig(Config):

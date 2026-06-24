@@ -25,6 +25,7 @@ def login():
                 session['pending_2fa_user'] = str(user.id)
                 return redirect(url_for('twofa.verify_page'))
             # Sinon, finaliser directement
+            session['user_id'] = str(user.id)
             return redirect(url_for('auth.finalize_login'))
         else:
             # TODO: Gérer les échecs et lockout (failed_login_count, locked_until)
