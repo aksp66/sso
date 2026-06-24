@@ -5,15 +5,21 @@
 <h1>Démarrage rapide</h1>
 <p>Intégrez l'authentification Nexus à votre application en quelques étapes.</p>
 
-<h2>1. Enregistrer votre application</h2>
+<h2>1. Demander l'accès pour votre application</h2>
 <p>
-  Un administrateur Nexus doit enregistrer votre application comme <strong>client OAuth2</strong> depuis le panneau
-  d'administration (<code>/admin/clients/new</code>). Vous recevrez :
+  Remplissez le <a href="{{ url_for('public.demande_acces') }}" style="color:var(--blue-400);">formulaire de demande d'accès</a>
+  avec les détails de votre application. Un administrateur Nexus examine chaque demande avant de l'approuver.
+  Une fois validée, vous recevez par e-mail :
 </p>
 <ul>
   <li><code>client_id</code> — identifiant public de votre application</li>
-  <li><code>client_secret</code> — secret confidentiel (uniquement pour les applications serveur)</li>
+  <li><code>client_secret</code> — secret confidentiel (uniquement pour les applications confidentielles/serveur)</li>
 </ul>
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Comptez la revue manuelle de la demande avant de recevoir vos identifiants — préparez vos
+  <code>redirect_uri</code> exactes, elles ne pourront pas être modifiées sans repasser par une nouvelle demande.</span>
+</div>
 
 <div class="docs-callout warn">
   <i class="fas fa-triangle-exclamation"></i>

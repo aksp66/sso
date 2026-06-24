@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Demande d'accès développeur — Nexus{% endblock %}
+
+{% block extra_head %}
+<style>
+  .request-center { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:40px 24px; }
+  .request-card { width:100%; max-width:620px; animation: fadeUp 0.45s ease both; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .request-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:560px) { .request-row { grid-template-columns:1fr; } }
+  textarea.input-field { padding:11px 14px; resize:vertical; min-height:80px; font-family:'Plus Jakarta Sans',sans-serif; }
+  .client-type-options { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:560px) { .client-type-options { grid-template-columns:1fr; } }
+  .client-type-card {
+    border:1px solid var(--glass-border); border-radius:10px; padding:14px;
+    cursor:pointer; transition:all 0.2s; background:rgba(255,255,255,0.03);
+  }
+  .client-type-card:hover { border-color:var(--glass-border-hover); }
+  .client-type-card input { margin-right:8px; }
+  .client-type-card .ct-title { font-weight:600; font-size:13px; }
+  .client-type-card .ct-desc { font-size:12px; color:var(--text-muted); margin-top:4px; }
+  .scope-checks { display:flex; gap:18px; flex-wrap:wrap; }
+  .scope-check { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="request-center">
+  <div class="request-card">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}{% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+          <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i> {{ message }}
+        </div>
+      {% endfor %}{% endif %}
+    {% endwith %}
+
+    <div class="glass" style="padding:40px 36px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#1D4ED8,#0369A1);
+                    display:flex;align-items:center;justify-content:center;margin:0 auto 16px;
+                    box-shadow:0 8px 28px rgba(29,78,216,0.4); font-size:24px; color:#fff;">
+          <i class="fas fa-plug-circle-plus"></i>
+        </div>
+        <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;">Demande d'accès développeur</h1>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px;">
+          Décrivez votre application — un administrateur examine chaque demande avant de
+          vous envoyer vos identifiants OAuth2 par e-mail.
+        </p>
+      </div>
+
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        <div class="request-row" style="margin-bottom:16px;">
+          <div>
+            <label class="label">Nom de l'application *</label>
+            <input type="text" name="client_name" required class="input-field input-no-icon"
+                   value="{{ form.get('client_name', '') }}" placeholder="Mon application" />
+          </div>
+          <div>
+            <label class="label">Organisation</label>
+            <input type="text" name="organization" class="input-field input-no-icon"
+                   value="{{ form.get('organization', '') }}" placeholder="Optionnel" />
+          </div>
+        </div>
+
+        <div class="request-row" style="margin-bottom:16px;">
+          <div>
+            <label class="label">Votre nom *</label>
+            <input type="text" name="contact_name" required class="input-field input-no-icon"
+                   value="{{ form.get('contact_name', '') }}" />
+          </div>
+          <div>
+            <label class="label">Votre e-mail *</label>
+            <input type="email" name="contact_email" required class="input-field input-no-icon"
+                   value="{{ form.get('contact_email', '') }}" placeholder="vous@exemple.com" />
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label class="label">Description / cas d'usage *</label>
+          <textarea name="description" required class="input-field input-no-icon" rows="3"
+                    placeholder="À quoi sert votre application et comment utilisera-t-elle Nexus ?">{{ form.get('description', '') }}</textarea>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label class="label">URIs de redirection (une par ligne) *</label>
+          <textarea name="redirect_uris" required class="input-field input-no-icon" rows="2"
+                    placeholder="https://monapp.com/callback">{{ form.get('redirect_uris', '') }}</textarea>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label class="label">Type d'application *</label>
+          <div class="client-type-options">
+            <label class="client-type-card">
+              <input type="radio" name="client_type" value="confidential" checked />
+              <span class="ct-title">Confidentiel</span>
+              <div class="ct-desc">Application serveur capable de garder un secret (backend web).</div>
+            </label>
+            <label class="client-type-card">
+              <input type="radio" name="client_type" value="public" />
+              <span class="ct-title">Public</span>
+              <div class="ct-desc">SPA, mobile ou CLI — PKCE obligatoire, pas de secret.</div>
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+          <label class="label">Scopes souhaités</label>
+          <div class="scope-checks">
+            <label class="scope-check"><input type="checkbox" name="scopes" value="openid" checked disabled /> openid (obligatoire)</label>
+            <input type="hidden" name="scopes" value="openid" />
+            <label class="scope-check"><input type="checkbox" name="scopes" value="email" /> email</label>
+            <label class="scope-check"><input type="checkbox" name="scopes" value="profile" /> profile</label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-paper-plane"></i> Soumettre la demande
+        </button>
+      </form>
+    </div>
+
+    <div style="text-align:center; margin-top:20px;">
+      <a href="{{ url_for('public.docs_developers', slug='demarrage-rapide') }}" style="font-size:13px; color:var(--blue-400); text-decoration:none;">
+        <i class="fas fa-arrow-left" style="font-size:11px;"></i> Documentation développeurs
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

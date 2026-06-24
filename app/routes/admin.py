@@ -1,9 +1,12 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from datetime import datetime, timezone
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.extensions import db, limiter
 from app.models.user import User
 from app.models.oauth2_client import OAuth2Client
-from app.models.audit_log import AuditLog
+from app.models.client_request import ClientRequest, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED
+from app.models.audit_log import AuditLog, EVENT_CLIENT_REGISTERED
 from app.services.totp_service import TOTPService  # pour reset 2FA
+from app.services.email_service import send_client_credentials_email, send_client_request_rejected_email
 import uuid
 from functools import wraps
 
@@ -90,6 +93,100 @@ def new_client():
         flash(f'Client créé. client_id : {client_id} / secret : {client_secret}', 'info')
         return redirect(url_for('admin.clients'))
     return render_template('admin/client_form.html')
+
+@admin_bp.route('/client-requests')
+@admin_required
+def client_requests():
+    page = request.args.get('page', 1, type=int)
+    status_filter = request.args.get('status', STATUS_PENDING)
+    query = ClientRequest.query
+    if status_filter in (STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED):
+        query = query.filter_by(status=status_filter)
+    pagination = query.order_by(ClientRequest.submitted_at.desc()).paginate(page=page, per_page=20)
+    return render_template(
+        'admin/client_requests.html',
+        requests=pagination.items,
+        pagination=pagination,
+        status_filter=status_filter,
+    )
+
+
+@admin_bp.route('/client-requests/<uuid:request_id>/approve', methods=['POST'])
+@admin_required
+def approve_client_request(request_id):
+    from app.extensions import bcrypt
+    import secrets
+
+    req = ClientRequest.query.get_or_404(request_id)
+    if not req.is_pending():
+        flash('Cette demande a déjà été traitée.', 'danger')
+        return redirect(url_for('admin.client_requests'))
+
+    client_id = secrets.token_urlsafe(16)
+    client_secret = secrets.token_urlsafe(32) if req.is_confidential else None
+    client = OAuth2Client(
+        client_id=client_id,
+        client_secret_hash=bcrypt.generate_password_hash(client_secret).decode('utf-8') if client_secret else '',
+        client_name=req.client_name,
+        redirect_uris=req.redirect_uris,
+        allowed_scopes=req.requested_scopes,
+        grant_types=['authorization_code', 'refresh_token'],
+        is_confidential=req.is_confidential,
+        is_active=True,
+    )
+    db.session.add(client)
+
+    req.status = STATUS_APPROVED
+    req.reviewed_at = datetime.now(timezone.utc)
+    req.reviewed_by = uuid.UUID(session['user_id'])
+    req.created_client_id = client_id
+
+    AuditLog.log(
+        event_type=EVENT_CLIENT_REGISTERED,
+        ip_address=request.remote_addr,
+        user_id=req.reviewed_by,
+        client_id=client_id,
+        user_agent=request.user_agent.string,
+        details={'source': 'self_service_request', 'request_id': str(req.id)},
+    )
+    db.session.commit()
+
+    try:
+        send_client_credentials_email(req.contact_email, req.client_name, client_id, client_secret)
+        flash(f'Client « {req.client_name} » créé et identifiants envoyés par e-mail.', 'success')
+    except Exception as exc:
+        current_app.logger.error(f"Envoi email credentials échoué pour {req.contact_email}: {exc}")
+        flash(
+            f'Client créé (client_id : {client_id}) mais l\'envoi de l\'e-mail a échoué — '
+            f'transmettez les identifiants manuellement.',
+            'warning',
+        )
+    return redirect(url_for('admin.client_requests'))
+
+
+@admin_bp.route('/client-requests/<uuid:request_id>/reject', methods=['POST'])
+@admin_required
+def reject_client_request(request_id):
+    req = ClientRequest.query.get_or_404(request_id)
+    if not req.is_pending():
+        flash('Cette demande a déjà été traitée.', 'danger')
+        return redirect(url_for('admin.client_requests'))
+
+    reason = request.form.get('reason', '').strip() or None
+    req.status = STATUS_REJECTED
+    req.reviewed_at = datetime.now(timezone.utc)
+    req.reviewed_by = uuid.UUID(session['user_id'])
+    req.rejection_reason = reason
+    db.session.commit()
+
+    try:
+        send_client_request_rejected_email(req.contact_email, req.client_name, reason)
+    except Exception as exc:
+        current_app.logger.error(f"Envoi email refus échoué pour {req.contact_email}: {exc}")
+
+    flash(f'Demande « {req.client_name} » refusée.', 'info')
+    return redirect(url_for('admin.client_requests'))
+
 
 @admin_bp.route('/audit-logs')
 @admin_required

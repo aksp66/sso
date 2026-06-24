@@ -1,0 +1,133 @@
+{% extends "admin/layout.html" %}
+{% block title %}Demandes d'accès{% endblock %}
+
+{% block admin_content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <i class="fas fa-inbox" style="color:var(--blue-400); font-size:20px;"></i>
+      Demandes d'accès développeur
+    </div>
+    <div class="topbar-breadcrumb">Admin / Demandes d'enregistrement OAuth2</div>
+  </div>
+</div>
+
+<div style="display:flex; gap:8px; margin-bottom:16px;">
+  <a href="{{ url_for('admin.client_requests', status='pending') }}"
+     class="badge {{ 'badge-blue' if status_filter == 'pending' else 'badge-gray' }}" style="padding:7px 14px; text-decoration:none;">
+    En attente
+  </a>
+  <a href="{{ url_for('admin.client_requests', status='approved') }}"
+     class="badge {{ 'badge-blue' if status_filter == 'approved' else 'badge-gray' }}" style="padding:7px 14px; text-decoration:none;">
+    Approuvées
+  </a>
+  <a href="{{ url_for('admin.client_requests', status='rejected') }}"
+     class="badge {{ 'badge-blue' if status_filter == 'rejected' else 'badge-gray' }}" style="padding:7px 14px; text-decoration:none;">
+    Refusées
+  </a>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px;">
+        Demandes
+      </span>
+      {% if pagination %}
+        <span class="badge badge-blue">{{ pagination.total }} total</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Contact</th>
+          <th>Type</th>
+          <th>Scopes</th>
+          <th>Soumise le</th>
+          {% if status_filter == 'pending' %}<th>Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in requests %}
+        <tr>
+          <td>
+            <div style="font-weight:600; color:var(--text-primary);">{{ req.client_name }}</div>
+            {% if req.organization %}<div style="font-size:12px; color:var(--text-muted);">{{ req.organization }}</div>{% endif %}
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px; max-width:280px;">{{ req.description }}</div>
+          </td>
+          <td>
+            <div style="color:var(--text-secondary); font-size:13px;">{{ req.contact_name }}</div>
+            <div style="color:var(--text-muted); font-size:12px;">{{ req.contact_email }}</div>
+          </td>
+          <td>
+            {% if req.is_confidential %}
+              <span class="badge badge-blue"><i class="fas fa-lock"></i> Confidentiel</span>
+            {% else %}
+              <span class="badge badge-gray"><i class="fas fa-lock-open"></i> Public</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+              {% for scope in req.requested_scopes %}
+                <span class="badge badge-gray" style="font-size:10px;">{{ scope }}</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td style="color:var(--text-muted); font-size:12px;">
+            {{ req.submitted_at.strftime('%d/%m/%Y %H:%M') }}
+          </td>
+          {% if status_filter == 'pending' %}
+          <td>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <form method="POST" action="{{ url_for('admin.approve_client_request', request_id=req.id) }}"
+                    onsubmit="return confirm('Approuver « {{ req.client_name }} » et envoyer les identifiants à {{ req.contact_email }} ?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="action-btn edit" title="Approuver">
+                  <i class="fas fa-check"></i>
+                </button>
+              </form>
+              <form method="POST" action="{{ url_for('admin.reject_client_request', request_id=req.id) }}"
+                    onsubmit="const r = prompt('Motif du refus (optionnel) :'); if (r === null) return false; this.reason.value = r; return true;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="reason" value="">
+                <button type="submit" class="action-btn danger" title="Refuser">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center; padding:50px; color:var(--text-muted);">
+            <i class="fas fa-inbox" style="font-size:32px; margin-bottom:12px; display:block; opacity:0.3;"></i>
+            Aucune demande {{ 'en attente' if status_filter == 'pending' else ('approuvée' if status_filter == 'approved' else 'refusée') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pagination and pagination.pages > 1 %}
+  <div class="pagination">
+    {% if pagination.has_prev %}
+      <a href="{{ url_for('admin.client_requests', page=pagination.prev_num, status=status_filter) }}" class="page-btn">
+        <i class="fas fa-chevron-left"></i> Précédent
+      </a>
+    {% endif %}
+    <span class="page-info">Page {{ pagination.page }} / {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+      <a href="{{ url_for('admin.client_requests', page=pagination.next_num, status=status_filter) }}" class="page-btn">
+        Suivant <i class="fas fa-chevron-right"></i>
+      </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

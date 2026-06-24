@@ -4,6 +4,7 @@ L'import dans app/__init__.py garantit que Alembic les détecte.
 """
 
 from .audit_log import AuditLog
+from .client_request import ClientRequest
 from .oauth2_client import OAuth2Client
 from .oauth2_code import OAuth2AuthorizationCode
 from .oauth2_consent import OAuth2Consent
@@ -13,6 +14,7 @@ from .user import User
 
 __all__ = [
     "User",
+    "ClientRequest",
     "OAuth2Client",
     "OAuth2AuthorizationCode",
     "OAuth2Consent",

@@ -43,6 +43,7 @@ def create_app(config_name: str | None = None) -> Flask:
     # ── Import des modèles (OBLIGATOIRE pour SQLAlchemy) ───────────────────
     with app.app_context():
         from .models.audit_log import AuditLog
+        from .models.client_request import ClientRequest
         from .models.oauth2_client import OAuth2Client
         from .models.oauth2_code import OAuth2AuthorizationCode
         from .models.oauth2_consent import OAuth2Consent
