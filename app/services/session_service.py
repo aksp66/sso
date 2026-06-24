@@ -1,11 +1,11 @@
-import uuid
+import secrets
 import json
 from datetime import datetime, timezone
 from flask import current_app
 from app.extensions import get_redis
 
 def create_user_session(user_id, ip, user_agent):
-    session_id = str(uuid.uuid4())
+    session_id = secrets.token_urlsafe(32)
     data = {
         'user_id': str(user_id),
         'ip': ip,
