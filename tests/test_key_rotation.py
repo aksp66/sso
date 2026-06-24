@@ -86,6 +86,37 @@ def test_jwks_exposes_only_non_expired_keys(client, db):
     assert len(keys) == 1
 
 
+def test_rotate_if_needed_skips_when_key_valid(db):
+    """rotate_if_needed ne crée pas de nouvelle clé si l'actuelle reste valide longtemps."""
+    RS256Key.query.delete()
+    db.session.commit()
+
+    key1 = KeyService.rotate_keys()
+    result = KeyService.rotate_if_needed()
+
+    assert result is None
+    active_keys = RS256Key.query.filter_by(is_active=True).all()
+    assert len(active_keys) == 1
+    assert active_keys[0].kid == key1.kid
+
+
+def test_rotate_if_needed_rotates_when_expiring_soon(db):
+    """rotate_if_needed effectue une rotation si la clé active expire bientôt."""
+    RS256Key.query.delete()
+    db.session.commit()
+
+    key1 = KeyService.rotate_keys()
+    key1.expires_at = datetime.now(timezone.utc) + timedelta(days=3)
+    db.session.commit()
+
+    result = KeyService.rotate_if_needed()
+
+    assert result is not None
+    assert result.kid != key1.kid
+    db.session.refresh(key1)
+    assert key1.is_active is False
+
+
 def test_key_encryption_decryption():
     """Vérifie le chiffrement/déchiffrement de la clé privée."""
     from app.services.key_service import KeyService

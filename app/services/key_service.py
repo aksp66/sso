@@ -2,6 +2,7 @@ import os
 import base64
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -49,6 +50,19 @@ class KeyService:
             current_app.logger.info("Table rs256_keys inexistante, création lors de la rotation")
             return KeyService.rotate_keys()
         # Aucune clé active ou expirée → rotation
+        return KeyService.rotate_keys()
+
+    @staticmethod
+    def rotate_if_needed(warning_days: int = 7) -> Optional[RS256Key]:
+        """Effectue une rotation seulement si la clé active est absente,
+        expirée, ou expire dans moins de `warning_days` jours.
+
+        Appelé quotidiennement par le scheduler (cron 2h) — sans ce garde-fou,
+        une rotation serait déclenchée à chaque exécution du job.
+        """
+        key = RS256Key.query.filter_by(is_active=True).first()
+        if key and key.days_until_expiry() > warning_days:
+            return None
         return KeyService.rotate_keys()
 
     @staticmethod
