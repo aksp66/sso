@@ -1,0 +1,35 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Aide &amp; utilisateurs</span>
+<h1>Créer un compte</h1>
+
+<p>
+  Les comptes Nexus sont actuellement créés par l'administrateur de votre organisation, et non via une inscription
+  publique. Si vous devez accéder à une application protégée par Nexus, contactez votre administrateur pour qu'il
+  crée votre compte.
+</p>
+
+<h2>Une fois votre compte créé</h2>
+<ol>
+  <li>Vous recevez votre adresse e-mail et un mot de passe temporaire de la part de votre administrateur</li>
+  <li>Connectez-vous sur la page de connexion de Nexus</li>
+  <li>Nous recommandons d'activer immédiatement la <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400);">double authentification (2FA)</a></li>
+</ol>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Si vous êtes administrateur, la 2FA est <strong>obligatoire</strong> pour accéder au panneau d'administration.</span>
+</div>
+
+<h2>Mot de passe oublié dès la première connexion ?</h2>
+<p>Utilisez le lien <a href="{{ url_for('auth.forgot_password') }}" style="color:var(--blue-400);">Mot de passe oublié</a>
+sur la page de connexion pour en définir un nouveau par e-mail.</p>
+
+<div class="docs-pager">
+  <span></span>
+  <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Se connecter &amp; activer la 2FA <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Documentation — {{ doc_title | default('Nexus') }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .docs-shell { display:flex; min-height:100vh; }
+
+  .docs-sidebar {
+    width:260px; flex-shrink:0;
+    background:rgba(10,22,40,0.85);
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border-right:1px solid var(--glass-border);
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .docs-logo {
+    display:flex; align-items:center; gap:10px;
+    padding:22px 20px; border-bottom:1px solid var(--glass-border);
+    text-decoration:none;
+  }
+  .docs-logo img { width:30px; height:30px; }
+  .docs-logo span { font-family:'Outfit',sans-serif; font-weight:800; font-size:16px; color:var(--text-primary); }
+
+  .docs-section-label {
+    padding:18px 20px 8px;
+    font-family:'Outfit',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);
+  }
+  .docs-link {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 20px; margin:1px 0;
+    font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; font-weight:500;
+    color:var(--text-secondary); text-decoration:none;
+    border-left:3px solid transparent; transition:all 0.18s;
+  }
+  .docs-link:hover { color:var(--text-primary); background:rgba(255,255,255,0.04); }
+  .docs-link.active {
+    color:var(--text-primary); background:rgba(29,78,216,0.12);
+    border-left-color:var(--blue-500); font-weight:600;
+  }
+  .docs-link i { width:16px; text-align:center; font-size:12px; }
+
+  .docs-back {
+    margin-top:auto; padding:16px 20px; border-top:1px solid var(--glass-border);
+  }
+
+  .docs-main { flex:1; padding:40px 48px; max-width:860px; }
+  @media (max-width:900px) { .docs-main { padding:28px 24px; } }
+
+  .docs-content h1 {
+    font-size:28px; font-weight:800; letter-spacing:-0.02em; margin-bottom:8px;
+  }
+  .docs-content .docs-kicker {
+    font-family:'Outfit',sans-serif; font-size:11px; font-weight:700;
+    letter-spacing:0.1em; text-transform:uppercase; color:var(--accent);
+    margin-bottom:10px; display:block;
+  }
+  .docs-content p {
+    font-size:14px; line-height:1.75; color:var(--text-secondary); margin:14px 0;
+  }
+  .docs-content h2 {
+    font-size:18px; font-weight:700; margin:32px 0 12px; color:var(--text-primary);
+  }
+  .docs-content h3 {
+    font-size:15px; font-weight:700; margin:22px 0 8px; color:var(--text-primary);
+  }
+  .docs-content ul, .docs-content ol {
+    margin:12px 0 12px 22px; color:var(--text-secondary); font-size:14px; line-height:1.8;
+  }
+  .docs-content li { margin-bottom:6px; }
+  .docs-content table {
+    width:100%; border-collapse:collapse; margin:16px 0; font-size:13px;
+  }
+  .docs-content th {
+    text-align:left; padding:9px 12px; background:rgba(255,255,255,0.04);
+    border-bottom:1px solid var(--glass-border); color:var(--text-muted);
+    font-family:'Outfit',sans-serif; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+  }
+  .docs-content td {
+    padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.05); color:var(--text-secondary);
+  }
+  .docs-content pre {
+    background:rgba(0,0,0,0.35); border:1px solid var(--glass-border);
+    border-radius:10px; padding:16px 18px; overflow-x:auto; margin:16px 0;
+  }
+  .docs-content pre code {
+    background:none; border:none; padding:0; color:#E2E8F0; font-size:12.5px; line-height:1.7;
+  }
+  .docs-callout {
+    display:flex; gap:12px; padding:14px 16px; border-radius:10px; margin:18px 0;
+    background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2);
+    font-size:13px; color:var(--text-secondary);
+  }
+  .docs-callout.warn { background:rgba(234,179,8,0.08); border-color:rgba(234,179,8,0.2); }
+  .docs-callout i { color:var(--accent); margin-top:2px; flex-shrink:0; }
+  .docs-callout.warn i { color:#FBBF24; }
+
+  .docs-pager {
+    display:flex; justify-content:space-between; gap:12px;
+    margin-top:40px; padding-top:20px; border-top:1px solid var(--glass-border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-shell">
+  <aside class="docs-sidebar">
+    <a href="{{ url_for('public.home') }}" class="docs-logo">
+      <img src="{{ url_for('static', filename='img/nexus-logo.svg') }}" alt="Nexus" />
+      <span>Nexus Docs</span>
+    </a>
+
+    <nav style="padding-bottom:8px;">
+      <div class="docs-section-label">Développeurs</div>
+      {% for slug, label in developer_docs %}
+        <a href="{{ url_for('public.docs_developers', slug=slug) }}"
+           class="docs-link {% if active_section == 'developers' and active_slug == slug %}active{% endif %}">
+          <i class="fas fa-code"></i> {{ label }}
+        </a>
+      {% endfor %}
+
+      <div class="docs-section-label">Aide &amp; utilisateurs</div>
+      {% for slug, label in help_docs %}
+        <a href="{{ url_for('public.docs_aide', slug=slug) }}"
+           class="docs-link {% if active_section == 'aide' and active_slug == slug %}active{% endif %}">
+          <i class="fas fa-circle-question"></i> {{ label }}
+        </a>
+      {% endfor %}
+    </nav>
+
+    <div class="docs-back">
+      <a href="{{ url_for('public.home') }}" class="docs-link" style="padding:0;">
+        <i class="fas fa-arrow-left"></i> Retour à l'accueil
+      </a>
+    </div>
+  </aside>
+
+  <main class="docs-main">
+    <div class="docs-content">
+      {% block doc_content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}

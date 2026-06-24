@@ -1,0 +1,43 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Codes d'erreur</h1>
+<p>Nexus retourne des erreurs OAuth2 standardisées (RFC 6749 §5.2) au format JSON.</p>
+
+<h2>Erreurs /authorize et /token</h2>
+<table>
+  <tr><th>Erreur</th><th>HTTP</th><th>Cause</th></tr>
+  <tr><td><code>invalid_request</code></td><td>400</td><td>Paramètre obligatoire manquant ou malformé</td></tr>
+  <tr><td><code>invalid_client</code></td><td>401</td><td>client_id inconnu ou client_secret incorrect</td></tr>
+  <tr><td><code>invalid_grant</code></td><td>400</td><td>Code d'autorisation invalide, expiré, déjà utilisé, PKCE incorrect, ou refresh token révoqué</td></tr>
+  <tr><td><code>access_denied</code></td><td>302 (redirect)</td><td>L'utilisateur a refusé le consentement</td></tr>
+  <tr><td><code>unsupported_grant_type</code></td><td>400</td><td><code>grant_type</code> autre que <code>authorization_code</code> ou <code>refresh_token</code></td></tr>
+</table>
+
+<h2>Erreurs /userinfo</h2>
+<table>
+  <tr><th>Erreur</th><th>HTTP</th><th>Cause</th></tr>
+  <tr><td><code>invalid_token</code></td><td>400</td><td>Token expiré, signature invalide, ou révoqué (blacklist)</td></tr>
+  <tr><td><code>invalid_token</code></td><td>401</td><td>En-tête <code>Authorization</code> absent ou mal formé</td></tr>
+</table>
+
+<h2>Exemple de réponse d'erreur</h2>
+<pre><code>{
+  "error": "invalid_grant",
+  "error_description": "Authorization code expired"
+}</code></pre>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Par sécurité, Nexus ne distingue jamais "code inexistant" de "code expiré" ou "PKCE incorrect" dans le
+  message d'erreur — toutes ces situations retournent <code>invalid_grant</code> sans détail exploitable.</span>
+</div>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_developers', slug='securite') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Sécurité &amp; bonnes pratiques
+  </a>
+  <span></span>
+</div>
+{% endblock %}

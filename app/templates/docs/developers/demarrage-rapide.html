@@ -1,0 +1,67 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Démarrage rapide</h1>
+<p>Intégrez l'authentification Nexus à votre application en quelques étapes.</p>
+
+<h2>1. Enregistrer votre application</h2>
+<p>
+  Un administrateur Nexus doit enregistrer votre application comme <strong>client OAuth2</strong> depuis le panneau
+  d'administration (<code>/admin/clients/new</code>). Vous recevrez :
+</p>
+<ul>
+  <li><code>client_id</code> — identifiant public de votre application</li>
+  <li><code>client_secret</code> — secret confidentiel (uniquement pour les applications serveur)</li>
+</ul>
+
+<div class="docs-callout warn">
+  <i class="fas fa-triangle-exclamation"></i>
+  <span>Si votre application est une SPA, une app mobile ou tout autre client qui ne peut pas garder un secret
+  confidentiel, elle doit être enregistrée comme <strong>client public</strong>. PKCE est alors obligatoire.</span>
+</div>
+
+<h2>2. Rediriger l'utilisateur vers Nexus</h2>
+<pre><code>GET /authorize?
+  response_type=code
+  &amp;client_id=VOTRE_CLIENT_ID
+  &amp;redirect_uri=https://votre-app.com/callback
+  &amp;scope=openid email profile
+  &amp;state=VALEUR_ALEATOIRE
+  &amp;code_challenge=XXXX        (clients publics)
+  &amp;code_challenge_method=S256</code></pre>
+
+<p>L'utilisateur se connecte, voit l'écran de consentement, puis est redirigé vers votre <code>redirect_uri</code> avec un code.</p>
+
+<h2>3. Échanger le code contre des tokens</h2>
+<pre><code>curl -X POST https://sso.example.com/token \
+  -u "VOTRE_CLIENT_ID:VOTRE_CLIENT_SECRET" \
+  -d grant_type=authorization_code \
+  -d code=LE_CODE_RECU \
+  -d redirect_uri=https://votre-app.com/callback \
+  -d code_verifier=VALEUR_GENEREE_A_L_ETAPE_2</code></pre>
+
+<p>Réponse :</p>
+<pre><code>{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "AbCdEf...",
+  "id_token": "eyJhbGciOi...",
+  "scope": "openid email profile"
+}</code></pre>
+
+<h2>4. Récupérer les informations utilisateur</h2>
+<pre><code>curl https://sso.example.com/userinfo \
+  -H "Authorization: Bearer eyJhbGciOi..."</code></pre>
+
+<p>Pour la suite, consultez la <a href="{{ url_for('public.docs_developers', slug='authentification') }}" style="color:var(--blue-400);">page Authentification</a>
+pour comprendre PKCE en détail, ou la <a href="{{ url_for('public.docs_developers', slug='reference-api') }}" style="color:var(--blue-400);">référence API</a> complète.</p>
+
+<div class="docs-pager">
+  <span></span>
+  <a href="{{ url_for('public.docs_developers', slug='authentification') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Authentification OAuth2 + PKCE <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

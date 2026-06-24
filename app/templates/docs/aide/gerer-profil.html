@@ -1,0 +1,36 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Aide &amp; utilisateurs</span>
+<h1>Gérer mon profil</h1>
+
+<p>Votre page de profil centralise les informations de votre compte et vos paramètres de sécurité.</p>
+
+<h2>Informations du compte</h2>
+<p>Nom d'utilisateur, e-mail, date de création et statut de la double authentification sont visibles en un coup d'œil.</p>
+
+<h2>Sécurité</h2>
+<p>
+  Activez ou consultez l'état de votre 2FA directement depuis cette section. Voir
+  <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400);">Se connecter &amp; activer la 2FA</a>.
+</p>
+
+<h2>Applications connectées</h2>
+<p>
+  La liste des applications tierces ayant accès à votre compte est affichée avec leurs scopes et la date de connexion.
+  Voir <a href="{{ url_for('public.docs_aide', slug='applications-connectees') }}" style="color:var(--blue-400);">Applications connectées</a>
+  pour savoir comment révoquer un accès.
+</p>
+
+<h2>Se déconnecter</h2>
+<p>Le bouton <strong>Se déconnecter</strong> termine votre session active sur cet appareil uniquement.</p>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_aide', slug='connexion-2fa') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Se connecter &amp; activer la 2FA
+  </a>
+  <a href="{{ url_for('public.docs_aide', slug='mot-de-passe-oublie') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Mot de passe oublié <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

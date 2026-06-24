@@ -94,16 +94,3 @@ def health_check():
         ),
         http_code,
     )
-
-
-@health_bp.get("/")
-def index():
-    """Redirection vers /health pour la racine."""
-    return jsonify(
-        {
-            "service": "Nexus",
-            "version": "1.0.0",
-            "status": "running",
-            "docs": "/.well-known/openid-configuration",
-        }
-    )

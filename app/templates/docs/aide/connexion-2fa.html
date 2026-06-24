@@ -1,0 +1,47 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Aide &amp; utilisateurs</span>
+<h1>Se connecter &amp; activer la 2FA</h1>
+
+<h2>Connexion</h2>
+<ol>
+  <li>Rendez-vous sur la page de connexion</li>
+  <li>Saisissez votre e-mail et votre mot de passe</li>
+  <li>Si la 2FA est activée sur votre compte, saisissez le code à 6 chiffres de votre application d'authentification</li>
+</ol>
+
+<div class="docs-callout warn">
+  <i class="fas fa-triangle-exclamation"></i>
+  <span>Après 10 tentatives de mot de passe incorrectes, votre compte est verrouillé automatiquement pendant 15 minutes.</span>
+</div>
+
+<h2>Activer la double authentification (2FA)</h2>
+<ol>
+  <li>Depuis votre profil, cliquez sur <strong>Activer la 2FA</strong></li>
+  <li>Scannez le QR code avec une application comme Google Authenticator, Authy ou 1Password</li>
+  <li>Saisissez le code à 6 chiffres généré pour confirmer l'activation</li>
+  <li>Conservez précieusement les <strong>10 codes de secours</strong> affichés — ils ne seront plus jamais montrés</li>
+</ol>
+
+<h2>Codes de secours</h2>
+<p>
+  Si vous perdez l'accès à votre application d'authentification, utilisez un code de secours à la place du code TOTP
+  sur l'écran de vérification. Chaque code de secours est <strong>à usage unique</strong>.
+</p>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Vous n'avez plus de codes de secours valides et avez perdu votre application 2FA ? Contactez votre
+  administrateur, qui peut réinitialiser votre 2FA depuis le panneau d'administration.</span>
+</div>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_aide', slug='creer-un-compte') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Créer un compte
+  </a>
+  <a href="{{ url_for('public.docs_aide', slug='gerer-profil') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Gérer mon profil <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Sécurité &amp; bonnes pratiques</h1>
+<p>Recommandations pour intégrer Nexus de façon sécurisée dans votre application.</p>
+
+<h2>Toujours utiliser PKCE</h2>
+<p>Même pour les clients confidentiels, PKCE ajoute une couche de protection supplémentaire contre l'interception
+de code. Nexus l'exige pour tout client public — il est fortement recommandé même pour les clients serveur.</p>
+
+<h2>Valider systématiquement le state</h2>
+<p>Ne traitez jamais une redirection vers votre <code>redirect_uri</code> sans vérifier que le <code>state</code> reçu
+correspond exactement à celui généré avant la requête <code>/authorize</code>.</p>
+
+<h2>Ne jamais exposer le client_secret côté client</h2>
+<p>Si votre application tourne dans un navigateur ou sur un appareil mobile, enregistrez-la comme client
+<strong>public</strong> (sans secret) et utilisez PKCE. Le <code>client_secret</code> ne doit exister que côté serveur.</p>
+
+<h2>Stocker les tokens en sécurité</h2>
+<ul>
+  <li>Access token et ID token : mémoire ou stockage de courte durée, jamais en <code>localStorage</code> pour les SPA exposées au XSS</li>
+  <li>Refresh token : cookie <code>HttpOnly</code> + <code>Secure</code> si possible, ou stockage serveur</li>
+</ul>
+
+<h2>Valider la signature et l'expiration des tokens</h2>
+<p>
+  Récupérez les clés publiques via <code>/jwks.json</code>, identifiez la bonne clé via le claim <code>kid</code> de
+  l'en-tête JWT, et vérifiez la signature RS256 ainsi que <code>exp</code> avant de faire confiance au token.
+</p>
+
+<h2>Révoquer les tokens à la déconnexion</h2>
+<p>
+  Appelez <code>POST /revoke</code> avec l'access token et/ou le refresh token lorsque l'utilisateur se déconnecte de
+  votre application, afin qu'ils soient immédiatement invalidés côté Nexus.
+</p>
+
+<div class="docs-callout warn">
+  <i class="fas fa-triangle-exclamation"></i>
+  <span>Tous les endpoints Nexus doivent être appelés en HTTPS en production. Le serveur ajoute
+  <code>Strict-Transport-Security</code> et refuse tout contenu mixte via sa Content-Security-Policy.</span>
+</div>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_developers', slug='scopes-claims') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Scopes &amp; claims
+  </a>
+  <a href="{{ url_for('public.docs_developers', slug='erreurs') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Codes d'erreur <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

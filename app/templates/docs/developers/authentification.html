@@ -1,0 +1,73 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Authentification OAuth2 + PKCE</h1>
+<p>Nexus implémente le flux <strong>Authorization Code</strong> (RFC 6749) avec extension <strong>PKCE</strong> (RFC 7636).</p>
+
+<h2>Pourquoi PKCE ?</h2>
+<p>
+  PKCE protège le flux contre l'interception du code d'autorisation, notamment sur les clients qui ne peuvent pas
+  garder de secret (SPA, mobile, CLI). Nexus l'exige pour tout client enregistré comme <strong>public</strong>
+  (<code>is_confidential = false</code>).
+</p>
+
+<h2>Génération du code_verifier / code_challenge</h2>
+<pre><code>// JavaScript
+const codeVerifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+const codeChallenge = base64url(await sha256(codeVerifier));
+// code_challenge_method = "S256"</code></pre>
+<pre><code># Python
+import secrets, hashlib, base64
+code_verifier = secrets.token_urlsafe(32)
+code_challenge = base64.urlsafe_b64encode(
+    hashlib.sha256(code_verifier.encode()).digest()
+).decode().rstrip("=")</code></pre>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span><code>code_verifier</code> doit contenir entre 43 et 128 caractères (RFC 7636 §4.1). Nexus rejette toute
+  valeur hors de cette plage avec <code>invalid_grant</code>.</span>
+</div>
+
+<h2>Déroulé complet</h2>
+<pre><code>Application          Navigateur           Nexus
+    │                    │                    │
+    │── Génère ──────────►│                    │
+    │  code_verifier      │                    │
+    │  code_challenge     │                    │
+    │                    │── GET /authorize ───►│
+    │                    │◄── Page de login ───│
+    │                    │── POST identifiants ─►│
+    │                    │◄── Page consentement│
+    │                    │── POST autoriser ───►│
+    │                    │◄── 302 ?code=... ───│
+    │◄── code ───────────│                    │
+    │── POST /token ────────────────────────────►│
+    │   + code_verifier                         │
+    │◄──── access_token + refresh_token + id_token│
+    │── GET /userinfo + Bearer ──────────────────►│
+    │◄──── claims utilisateur ───────────────────│</code></pre>
+
+<h2>Le paramètre state</h2>
+<p>
+  Toujours envoyer un <code>state</code> aléatoire et unique par requête, le stocker côté client (session ou cookie),
+  puis vérifier qu'il correspond exactement à la valeur retournée par Nexus après redirection. Cela protège votre
+  application contre les attaques CSRF sur le flux d'autorisation (RFC 6749 §10.12).
+</p>
+
+<h2>Rotation des refresh tokens</h2>
+<p>
+  Chaque utilisation d'un <code>refresh_token</code> révoque l'ancien et émet un nouveau (RFC 6749 §10.4). Ne réutilisez
+  jamais un refresh token déjà échangé — il sera rejeté avec <code>invalid_grant</code>.
+</p>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_developers', slug='demarrage-rapide') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Démarrage rapide
+  </a>
+  <a href="{{ url_for('public.docs_developers', slug='reference-api') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Référence API <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

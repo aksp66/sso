@@ -1,0 +1,70 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Référence API</h1>
+<p>Liste complète des endpoints exposés par Nexus.</p>
+
+<h2>GET /.well-known/openid-configuration</h2>
+<p>Métadonnées de découverte OpenID Connect.</p>
+
+<h2>GET /jwks.json</h2>
+<p>Clés publiques RS256 actives, au format JWK Set. Utilisé pour vérifier la signature des tokens.</p>
+
+<h2>GET /authorize</h2>
+<table>
+  <tr><th>Paramètre</th><th>Requis</th><th>Description</th></tr>
+  <tr><td><code>response_type</code></td><td>Oui</td><td>Doit être <code>code</code></td></tr>
+  <tr><td><code>client_id</code></td><td>Oui</td><td>Identifiant du client</td></tr>
+  <tr><td><code>redirect_uri</code></td><td>Oui</td><td>URI enregistrée pour ce client</td></tr>
+  <tr><td><code>scope</code></td><td>Oui</td><td><code>openid</code>, <code>email</code>, <code>profile</code></td></tr>
+  <tr><td><code>state</code></td><td>Recommandé</td><td>Anti-CSRF, renvoyé à l'identique</td></tr>
+  <tr><td><code>code_challenge</code></td><td>Public : oui</td><td>PKCE — SHA-256 du verifier</td></tr>
+  <tr><td><code>code_challenge_method</code></td><td>Si PKCE</td><td>Doit être <code>S256</code></td></tr>
+  <tr><td><code>nonce</code></td><td>Optionnel</td><td>Anti-replay, inclus dans l'ID token</td></tr>
+</table>
+
+<h2>POST /token</h2>
+<p>Authentification client via <code>Authorization: Basic</code> ou champs POST <code>client_id</code>/<code>client_secret</code>.</p>
+
+<h3>grant_type=authorization_code</h3>
+<pre><code>grant_type=authorization_code
+&amp;code=...
+&amp;redirect_uri=...
+&amp;code_verifier=...   # si PKCE</code></pre>
+
+<h3>grant_type=refresh_token</h3>
+<pre><code>grant_type=refresh_token
+&amp;refresh_token=...</code></pre>
+
+<h3>Réponse 200</h3>
+<pre><code>{
+  "access_token": "<JWT RS256>",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "<opaque>",
+  "scope": "openid email",
+  "id_token": "<JWT RS256>"
+}</code></pre>
+
+<h2>GET /userinfo</h2>
+<p>En-tête <code>Authorization: Bearer &lt;access_token&gt;</code>. Les claims retournés dépendent du <code>scope</code> du token —
+voir <a href="{{ url_for('public.docs_developers', slug='scopes-claims') }}" style="color:var(--blue-400);">Scopes &amp; claims</a>.</p>
+
+<h2>POST /revoke</h2>
+<p>Révocation RFC 7009. Retourne toujours <code>200</code>.</p>
+<pre><code>token=...
+&amp;token_type_hint=access_token|refresh_token</code></pre>
+
+<h2>GET /health</h2>
+<p>État des composants (base de données, Redis, clé RS256 active). Utilisable comme probe de santé.</p>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_developers', slug='authentification') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Authentification
+  </a>
+  <a href="{{ url_for('public.docs_developers', slug='scopes-claims') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Scopes &amp; claims <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

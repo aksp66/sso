@@ -1,0 +1,44 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Aide &amp; utilisateurs</span>
+<h1>Applications connectées</h1>
+
+<p>
+  Chaque application tierce qui utilise Nexus pour vous authentifier apparaît dans la section
+  <strong>Applications connectées</strong> de votre profil, avec :
+</p>
+<ul>
+  <li>Le nom de l'application</li>
+  <li>Les permissions (scopes) accordées</li>
+  <li>La date depuis laquelle l'accès est actif</li>
+</ul>
+
+<h2>Révoquer l'accès d'une application</h2>
+<ol>
+  <li>Allez dans votre profil, section <strong>Applications connectées</strong></li>
+  <li>Cliquez sur <strong>Révoquer</strong> à côté de l'application concernée</li>
+  <li>Confirmez — l'accès est immédiatement invalidé, l'application devra demander une nouvelle autorisation</li>
+</ol>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Révoquer une application ne supprime pas votre compte ni vos données dans cette application — cela coupe
+  uniquement sa capacité à s'authentifier via Nexus en votre nom.</span>
+</div>
+
+<h2>Pourquoi le consentement est demandé à nouveau ?</h2>
+<p>
+  Si une application demande de nouvelles permissions (par exemple l'accès à votre e-mail alors qu'elle n'avait que
+  votre identifiant), Nexus vous présente à nouveau l'écran de consentement pour ces scopes supplémentaires.
+</p>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_aide', slug='mot-de-passe-oublie') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Mot de passe oublié
+  </a>
+  <a href="{{ url_for('public.docs_aide', slug='faq') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Questions fréquentes <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}

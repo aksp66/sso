@@ -1,0 +1,54 @@
+{% extends "docs/layout.html" %}
+{% block doc_content %}
+
+<span class="docs-kicker">Développeurs</span>
+<h1>Scopes &amp; claims</h1>
+<p>Nexus filtre les claims retournés par <code>/userinfo</code> et l'ID token selon les scopes accordés par l'utilisateur.</p>
+
+<h2>Scopes supportés</h2>
+<table>
+  <tr><th>Scope</th><th>Description</th><th>Claims associés</th></tr>
+  <tr><td><code>openid</code></td><td>Obligatoire — active le flux OpenID Connect</td><td><code>sub</code></td></tr>
+  <tr><td><code>email</code></td><td>Accès à l'adresse e-mail</td><td><code>email</code>, <code>email_verified</code></td></tr>
+  <tr><td><code>profile</code></td><td>Accès au nom et à l'identifiant</td><td><code>name</code>, <code>preferred_username</code>, <code>updated_at</code></td></tr>
+</table>
+
+<h2>Claims de l'access token (JWT RS256)</h2>
+<pre><code>{
+  "iss": "https://sso.example.com",
+  "sub": "&lt;uuid-utilisateur&gt;",
+  "aud": "&lt;client_id&gt;",
+  "scope": "openid email",
+  "email": "user@example.com",
+  "name": "Alice",
+  "is_admin": false,
+  "iat": 1718539200,
+  "exp": 1718542800,
+  "jti": "&lt;uuid-v4&gt;"
+}</code></pre>
+
+<h2>Claims de l'ID token</h2>
+<pre><code>{
+  "sub": "&lt;uuid-utilisateur&gt;",
+  "email": "user@example.com",
+  "email_verified": true,
+  "name": "Alice",
+  "preferred_username": "alice",
+  "nonce": "&lt;valeur fournie à /authorize&gt;"
+}</code></pre>
+
+<div class="docs-callout">
+  <i class="fas fa-circle-info"></i>
+  <span>Si votre requête <code>/authorize</code> demande <code>scope=openid</code> seul, <code>/userinfo</code> ne
+  retournera que <code>sub</code> — aucune autre donnée personnelle ne sera exposée.</span>
+</div>
+
+<div class="docs-pager">
+  <a href="{{ url_for('public.docs_developers', slug='reference-api') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    <i class="fas fa-arrow-left"></i> Référence API
+  </a>
+  <a href="{{ url_for('public.docs_developers', slug='securite') }}" style="color:var(--blue-400); text-decoration:none; font-size:13px;">
+    Sécurité &amp; bonnes pratiques <i class="fas fa-arrow-right"></i>
+  </a>
+</div>
+{% endblock %}
