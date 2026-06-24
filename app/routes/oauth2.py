@@ -157,6 +157,12 @@ def authorize():
             email = request.form.get('email')
             password = request.form.get('password')
             user = User.query.filter_by(email=email, is_active=True).first()
+            if user and bcrypt.check_password_hash(user.password_hash, password) and not user.email_verified:
+                return render_template(
+                    'login.html',
+                    error="Veuillez confirmer votre adresse e-mail avant de vous connecter",
+                    **request.args,
+                )
             if user and bcrypt.check_password_hash(user.password_hash, password):
                 # Créer session Redis
                 session_id = create_user_session(user.id, request.remote_addr, request.user_agent.string)

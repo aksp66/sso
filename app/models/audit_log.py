@@ -43,6 +43,8 @@ EVENT_CONSENT_GRANTED = "consent_granted"
 EVENT_ADMIN_USER_CREATED = "admin_user_created"
 EVENT_ADMIN_USER_UPDATED = "admin_user_updated"
 EVENT_ADMIN_USER_DELETED = "admin_user_deleted"
+EVENT_ACCOUNT_REGISTERED = "account_registered"
+EVENT_EMAIL_VERIFIED = "email_verified"
 
 
 class AuditLog(db.Model):

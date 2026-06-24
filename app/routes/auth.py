@@ -11,9 +11,11 @@ from app.models.audit_log import (
     EVENT_ACCOUNT_LOCKED,
     EVENT_LOGOUT,
     EVENT_TOKEN_REVOKED,
+    EVENT_ACCOUNT_REGISTERED,
+    EVENT_EMAIL_VERIFIED,
 )
 from app.services.session_service import create_user_session
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import send_password_reset_email, send_verification_email
 import uuid
 import secrets
 
@@ -33,6 +35,17 @@ def login():
         # Vérifier le verrouillage avant toute autre opération
         if user and user.is_locked():
             flash('Compte verrouillé. Veuillez réessayer plus tard.', 'danger')
+            return render_template('login.html')
+
+        # Un compte désactivé par un administrateur ne doit jamais pouvoir se connecter
+        if user and not user.is_active:
+            flash('Ce compte a été désactivé. Contactez un administrateur.', 'danger')
+            return render_template('login.html')
+
+        # Inscription self-service non encore confirmée par e-mail
+        if user and not user.email_verified and bcrypt.check_password_hash(user.password_hash, password):
+            flash('Veuillez confirmer votre adresse e-mail avant de vous connecter '
+                  '(vérifiez votre boîte de réception).', 'warning')
             return render_template('login.html')
 
         if user and bcrypt.check_password_hash(user.password_hash, password):
@@ -75,6 +88,95 @@ def login():
             flash('Email ou mot de passe incorrect', 'danger')
             return render_template('login.html')
     return render_template('login.html')
+
+_VERIFY_EMAIL_TTL = 86400  # 24 heures
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+@limiter.limit("10 per hour")
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+
+        errors = []
+        if len(username) < 3:
+            errors.append('Le nom d\'utilisateur doit comporter au moins 3 caractères.')
+        if not email or '@' not in email:
+            errors.append('Une adresse e-mail valide est requise.')
+        if len(password) < 8:
+            errors.append('Le mot de passe doit comporter au moins 8 caractères.')
+        if password != confirm:
+            errors.append('Les mots de passe ne correspondent pas.')
+        if not errors and User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first():
+            errors.append('Ce nom d\'utilisateur ou cette adresse e-mail est déjà utilisé.')
+
+        if errors:
+            for err in errors:
+                flash(err, 'danger')
+            return render_template('register.html', form=request.form)
+
+        user = User(
+            username=username,
+            email=email,
+            password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
+            is_active=True,
+            email_verified=False,
+        )
+        db.session.add(user)
+        db.session.flush()  # attribue user.id avant de l'utiliser
+
+        token = secrets.token_urlsafe(32)
+        redis = get_redis()
+        redis.setex(f'email_verify:{token}', _VERIFY_EMAIL_TTL, str(user.id))
+
+        AuditLog.log(
+            event_type=EVENT_ACCOUNT_REGISTERED,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            user_agent=request.user_agent.string,
+        )
+        db.session.commit()
+
+        verify_link = url_for('auth.verify_email', token=token, _external=True)
+        try:
+            send_verification_email(user.email, user.username, verify_link)
+        except Exception as exc:
+            current_app.logger.error(f"Envoi email vérification échoué pour {email}: {exc}")
+        flash(
+            'Compte créé ! Vérifiez votre boîte e-mail pour confirmer votre adresse avant de vous connecter.',
+            'success',
+        )
+        return redirect(url_for('auth.login'))
+    return render_template('register.html', form={})
+
+
+@auth_bp.route('/verify-email/<token>')
+def verify_email(token: str):
+    redis = get_redis()
+    user_id_str = redis.get(f'email_verify:{token}')
+    if not user_id_str:
+        flash('Lien de confirmation invalide ou expiré.', 'danger')
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(user_id_str))
+    if not user:
+        flash('Utilisateur introuvable.', 'danger')
+        return redirect(url_for('auth.login'))
+    user.email_verified = True
+    redis.delete(f'email_verify:{token}')
+    AuditLog.log(
+        event_type=EVENT_EMAIL_VERIFIED,
+        ip_address=request.remote_addr,
+        user_id=user.id,
+        user_agent=request.user_agent.string,
+    )
+    db.session.commit()
+    flash('Adresse e-mail confirmée ! Vous pouvez maintenant vous connecter.', 'success')
+    return redirect(url_for('auth.login'))
+
 
 @auth_bp.route('/finalize-login')
 def finalize_login():
@@ -204,11 +306,11 @@ def forgot_password():
 @auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token: str):
     redis = get_redis()
-    user_id_bytes = redis.get(f'pwd_reset:{token}')
-    if not user_id_bytes:
+    user_id_str = redis.get(f'pwd_reset:{token}')
+    if not user_id_str:
         flash('Lien invalide ou expiré.', 'danger')
         return redirect(url_for('auth.forgot_password'))
-    user = User.query.get(uuid.UUID(user_id_bytes.decode()))
+    user = User.query.get(uuid.UUID(user_id_str))
     if not user:
         flash('Utilisateur introuvable.', 'danger')
         return redirect(url_for('auth.forgot_password'))

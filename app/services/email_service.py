@@ -72,6 +72,42 @@ def _send(to_email: str, subject: str, text_body: str, html_body: str) -> None:
         smtp.sendmail(cfg["SMTP_FROM"], [to_email], msg.as_string())
 
 
+def send_verification_email(to_email: str, username: str, verify_link: str) -> None:
+    """Envoie le lien de confirmation d'adresse e-mail après inscription self-service."""
+    text_body = (
+        f"Bonjour {username},\n\n"
+        f"Bienvenue sur Nexus ! Confirmez votre adresse e-mail en cliquant sur ce lien "
+        f"(valable 24 heures) :\n{verify_link}\n\n"
+        f"Si vous n'êtes pas à l'origine de cette inscription, ignorez cet e-mail."
+    )
+    html_body = f"""
+<!doctype html>
+<html lang="fr">
+<body style="margin:0;padding:0;background:#030d1c;font-family:'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;padding:32px;
+              background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);
+              border-radius:16px;color:#F0F6FF;">
+    <h2 style="font-size:20px;font-weight:700;margin:0 0 16px;color:#60A5FA;">
+      Bienvenue sur Nexus, {username} !
+    </h2>
+    <p style="font-size:14px;color:#94A3B8;line-height:1.7;margin:0 0 24px;">
+      Confirmez votre adresse e-mail pour activer votre compte.
+      Ce lien est valable <strong style="color:#F0F6FF;">24 heures</strong>.
+    </p>
+    <a href="{verify_link}"
+       style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#1D4ED8,#0369A1);
+              color:#fff;font-weight:600;font-size:14px;text-decoration:none;border-radius:10px;">
+      Confirmer mon e-mail
+    </a>
+    <p style="font-size:12px;color:#64748B;margin-top:24px;line-height:1.6;">
+      Si vous n'êtes pas à l'origine de cette inscription, ignorez cet e-mail.
+    </p>
+  </div>
+</body>
+</html>"""
+    _send(to_email, "Confirmez votre adresse e-mail — Nexus", text_body, html_body)
+
+
 def send_client_credentials_email(
     to_email: str, client_name: str, client_id: str, client_secret: str | None
 ) -> None:

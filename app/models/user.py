@@ -52,6 +52,9 @@ class User(db.Model):
     # ── Rôles & statut ─────────────────────────────────────────────────────
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Inscription self-service : compte créé mais e-mail non encore confirmé.
+    # True par défaut (comptes créés par un admin ou pré-existants : pas de vérification requise).
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # ── 2FA TOTP (RFC 6238) ────────────────────────────────────────────────
     # La clé secrète est chiffrée en AES-256-GCM avant stockage

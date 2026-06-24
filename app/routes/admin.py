@@ -4,7 +4,7 @@ from app.extensions import db, limiter
 from app.models.user import User
 from app.models.oauth2_client import OAuth2Client
 from app.models.client_request import ClientRequest, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED
-from app.models.audit_log import AuditLog, EVENT_CLIENT_REGISTERED
+from app.models.audit_log import AuditLog, EVENT_CLIENT_REGISTERED, EVENT_ADMIN_USER_CREATED
 from app.services.totp_service import TOTPService  # pour reset 2FA
 from app.services.email_service import send_client_credentials_email, send_client_request_rejected_email
 import uuid
@@ -35,6 +35,44 @@ def users():
     page = request.args.get('page', 1, type=int)
     pagination = User.query.paginate(page=page, per_page=20)
     return render_template('admin/users.html', users=pagination.items, pagination=pagination)
+
+@admin_bp.route('/users/new', methods=['GET', 'POST'])
+@admin_required
+def new_user():
+    from app.extensions import bcrypt
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        if not username or not email or not password:
+            flash('Le nom d\'utilisateur, l\'e-mail et le mot de passe sont requis.', 'danger')
+            return render_template('admin/user_form.html', user=None)
+        if len(password) < 8:
+            flash('Le mot de passe doit comporter au moins 8 caractères.', 'danger')
+            return render_template('admin/user_form.html', user=None)
+        if User.query.filter((User.username == username) | (User.email == email)).first():
+            flash('Ce nom d\'utilisateur ou cette adresse e-mail est déjà utilisé.', 'danger')
+            return render_template('admin/user_form.html', user=None)
+        user = User(
+            username=username,
+            email=email,
+            password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
+            is_admin='is_admin' in request.form,
+            is_active='is_active' in request.form,
+            email_verified=True,  # créé par un admin : pas de vérification nécessaire
+        )
+        db.session.add(user)
+        AuditLog.log(
+            event_type=EVENT_ADMIN_USER_CREATED,
+            ip_address=request.remote_addr,
+            user_id=uuid.UUID(session['user_id']),
+            user_agent=request.user_agent.string,
+            details={'created_user_email': email},
+        )
+        db.session.commit()
+        flash(f'Utilisateur {email} créé.', 'success')
+        return redirect(url_for('admin.users'))
+    return render_template('admin/user_form.html', user=None)
 
 @admin_bp.route('/users/<uuid:user_id>/edit', methods=['GET', 'POST'])
 @admin_required
