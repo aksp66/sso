@@ -8,6 +8,7 @@ from .extensions import (
     init_redis,
     limiter,
     migrate,
+    scheduler,
 )
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -36,6 +37,15 @@ def create_app(config_name: str | None = None) -> Flask:
     # ── Client Redis ───────────────────────────────────────────────────────
     init_redis(app.config["REDIS_URL"])
 
+    # ── Initialisation de la clé RS256 (après que les modèles sont chargés) ─
+    if not app.config.get('TESTING'):
+        with app.app_context():
+            from app.services.key_service import KeyService
+            try:
+                KeyService.get_active_key()
+            except Exception as e:
+                app.logger.warning(f"Erreur initialisation clé RS256 : {e}")
+
     # ── Enregistrement des Blueprints ──────────────────────────────────────
     from .routes.health import health_bp
     app.register_blueprint(health_bp)
@@ -43,4 +53,30 @@ def create_app(config_name: str | None = None) -> Flask:
     from .routes.auth import auth_bp
     app.register_blueprint(auth_bp)
 
+    from .routes.oauth2 import oauth2_bp
+    app.register_blueprint(oauth2_bp)
+
+    # ── Scheduler (rotation des clés RS256) ───────────────────────────────
+    if not app.config.get("TESTING") and not scheduler.running:
+        _register_scheduled_tasks(app)
+        scheduler.start()
+
     return app
+
+def _register_scheduled_tasks(app: Flask) -> None:
+    def rotate_rs256_keys() -> None:
+        with app.app_context():
+            try:
+                from .services.key_service import KeyService
+                KeyService.rotate_if_needed()
+            except Exception as exc:
+                app.logger.error(f"Erreur rotation clés RS256 : {exc}")
+
+    scheduler.add_job(
+        rotate_rs256_keys,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        id="rs256_key_rotation",
+        replace_existing=True,
+    )

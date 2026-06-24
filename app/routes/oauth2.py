@@ -1,0 +1,404 @@
+import os
+import hashlib
+import base64
+import uuid
+from datetime import datetime, timedelta, timezone
+from flask import Blueprint, request, redirect, render_template, session, current_app, jsonify
+from werkzeug.exceptions import BadRequest
+from cryptography.hazmat.primitives import serialization
+from app.extensions import db, bcrypt, limiter, get_redis, csrf
+from app.models.user import User
+from app.models.oauth2_client import OAuth2Client
+from app.models.oauth2_code import OAuth2AuthorizationCode
+from app.models.oauth2_token import OAuth2Token
+from app.models.rs256_key import RS256Key
+from app.services.key_service import KeyService
+from app.services.session_service import create_user_session
+import jwt
+
+oauth2_bp = Blueprint('oauth2', __name__)
+
+# ----------------------------------------------------------------------
+# Utilitaires JWT
+# ----------------------------------------------------------------------
+def _sign_jwt(payload: dict, expires_in: int, token_type: str = 'access') -> str:
+    """Signe un JWT avec la clé RS256 active."""
+    key = KeyService.get_active_key()
+    private_key = KeyService.decrypt_private_key(key.private_key_encrypted, current_app.config['AES_ENCRYPTION_KEY'])
+    now = datetime.now(timezone.utc)
+    iat = int(now.timestamp())
+    exp = iat + expires_in
+    payload.update({
+        'iss': current_app.config['SSO_ISSUER'],
+        'iat': iat,
+        'exp': exp,
+        'jti': str(uuid.uuid4())
+    })
+    token = jwt.encode(payload, private_key, algorithm='RS256', headers={'kid': key.kid})
+    return token
+
+def _verify_bearer_token(token_str: str) -> dict:
+    """Vérifie un access token JWT (signature, expiration, blacklist)."""
+    try:
+        # Récupérer l'en-tête pour obtenir le kid
+        header = jwt.get_unverified_header(token_str)
+        kid = header.get('kid')
+        if not kid:
+            raise jwt.InvalidTokenError('No kid in header')
+
+        # Charger la clé publique correspondante
+        key = RS256Key.query.filter_by(kid=kid).first()
+        if not key:
+            raise jwt.InvalidTokenError(f'Unknown kid: {kid}')
+
+        public_key = serialization.load_pem_public_key(key.public_key_pem.encode())
+
+        # Décoder et vérifier la signature
+        payload = jwt.decode(
+            token_str,
+            public_key,
+            algorithms=['RS256'],
+            options={
+             'require': ['exp', 'iat', 'jti'],
+             'verify_aud': False
+             }
+        )
+
+        # Vérifier la blacklist Redis
+        redis = get_redis()
+        if redis.exists(f'blacklist:{payload["jti"]}'):
+            raise jwt.InvalidTokenError('Token revoked')
+
+        return payload
+    except jwt.InvalidTokenError as e:
+        raise BadRequest(f'Invalid token: {str(e)}')
+
+# ----------------------------------------------------------------------
+# OpenID Connect Discovery
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/.well-known/openid-configuration')
+def openid_config():
+    issuer = current_app.config['SSO_ISSUER']
+    return jsonify({
+        "issuer": issuer,
+        "authorization_endpoint": f"{issuer}/authorize",
+        "token_endpoint": f"{issuer}/token",
+        "userinfo_endpoint": f"{issuer}/userinfo",
+        "jwks_uri": f"{issuer}/jwks.json",
+        "revocation_endpoint": f"{issuer}/revoke",
+        "response_types_supported": ["code"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "profile", "email"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"]
+    })
+
+@oauth2_bp.route('/jwks.json')
+def jwks():
+    keys = RS256Key.query.filter(RS256Key.expires_at > datetime.now(timezone.utc)).all()
+    jwks_keys = []
+    for k in keys:
+        public_key = serialization.load_pem_public_key(k.public_key_pem.encode())
+        numbers = public_key.public_numbers()
+        n = base64.urlsafe_b64encode(numbers.n.to_bytes((numbers.n.bit_length() + 7) // 8, 'big')).decode().rstrip('=')
+        e = base64.urlsafe_b64encode(numbers.e.to_bytes((numbers.e.bit_length() + 7) // 8, 'big')).decode().rstrip('=')
+        jwks_keys.append({
+            "kty": "RSA",
+            "use": "sig",
+            "alg": k.algorithm,
+            "kid": k.kid,
+            "n": n,
+            "e": e
+        })
+    return jsonify({"keys": jwks_keys})
+
+# ----------------------------------------------------------------------
+# /authorize (GET - formulaire de login/consent)
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/authorize', methods=['GET', 'POST'])
+@limiter.limit("50 per minute")
+def authorize():
+    # Récupération des paramètres OAuth2
+    client_id = request.args.get('client_id')
+    redirect_uri = request.args.get('redirect_uri')
+    response_type = request.args.get('response_type', '')
+    scope = request.args.get('scope', '')
+    state = request.args.get('state')
+    nonce = request.args.get('nonce')
+    code_challenge = request.args.get('code_challenge')
+    code_challenge_method = request.args.get('code_challenge_method', '')
+    if response_type != 'code':
+        return BadRequest('response_type must be code')
+    # Validation client
+    client = OAuth2Client.query.filter_by(client_id=client_id, is_active=True).first()
+    if not client or not client.has_redirect_uri(redirect_uri):
+        return BadRequest('Invalid client or redirect_uri')
+    if not client.has_scope(scope):
+        return BadRequest('Requested scope not allowed')
+    if code_challenge and code_challenge_method != 'S256':
+        return BadRequest('Only S256 code_challenge_method is allowed')
+    # Session utilisateur
+    user_id = session.get('user_id')
+    if not user_id:
+        # Non connecté : afficher login
+        if request.method == 'POST':
+            email = request.form.get('email')
+            password = request.form.get('password')
+            user = User.query.filter_by(email=email, is_active=True).first()
+            if user and bcrypt.check_password_hash(user.password_hash, password):
+                # Créer session Redis
+                session_id = create_user_session(user.id, request.remote_addr, request.user_agent.string)
+                session['user_id'] = str(user.id)
+                session['session_id'] = session_id
+                # Rediriger vers GET /authorize avec les mêmes params
+                return redirect(request.url)
+            else:
+                return render_template('login.html', error='Email ou mot de passe incorrect', **request.args)
+        return render_template('login.html', **request.args)
+    # Utilisateur déjà connecté : auto-consentement, génération du code
+    user = User.query.get(uuid.UUID(user_id))
+    if not user:
+        session.clear()
+        return redirect(request.url)
+    # Générer le code d'autorisation
+    code = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('=')
+    expires_in = current_app.config.get('AUTHORIZATION_CODE_EXPIRE_SECONDS', 300)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    auth_code = OAuth2AuthorizationCode(
+        code=code,
+        user_id=user.id,
+        client_id=client.client_id,
+        redirect_uri=redirect_uri,
+        scope=scope,
+        nonce=nonce,
+        code_challenge=code_challenge,
+        code_challenge_method=code_challenge_method,
+        expires_at=expires_at
+    )
+    db.session.add(auth_code)
+    db.session.commit()
+    # Redirection vers le client avec le code (et le state reçu directement)
+    redirect_params = f"code={code}"
+    if state:
+        redirect_params += f"&state={state}"
+    return redirect(f"{redirect_uri}?{redirect_params}")
+
+# ----------------------------------------------------------------------
+# /token
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/token', methods=['POST'])
+@csrf.exempt
+@limiter.limit("100 per minute")
+def token():
+    # Authentification client (Basic ou POST)
+    auth = request.authorization
+    client_id = None
+    client_secret = None
+    if auth:
+        client_id = auth.username
+        client_secret = auth.password
+    else:
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+    if not client_id:
+        return jsonify({'error': 'invalid_client'}), 401
+    client = OAuth2Client.query.filter_by(client_id=client_id, is_active=True).first()
+    if not client:
+        return jsonify({'error': 'invalid_client'}), 401
+    if client.is_confidential:
+        if not client_secret or not bcrypt.check_password_hash(client.client_secret_hash, client_secret):
+            return jsonify({'error': 'invalid_client'}), 401
+    grant_type = request.form.get('grant_type')
+    if grant_type == 'authorization_code':
+        code = request.form.get('code')
+        redirect_uri = request.form.get('redirect_uri')
+        code_verifier = request.form.get('code_verifier')
+        auth_code = OAuth2AuthorizationCode.query.filter_by(code=code, client_id=client.client_id).first()
+        if not auth_code or auth_code.is_expired() or auth_code.is_used():
+            return jsonify({'error': 'invalid_grant'}), 400
+        if auth_code.redirect_uri != redirect_uri:
+            return jsonify({'error': 'invalid_grant'}), 400
+        if auth_code.code_challenge:
+            if not code_verifier:
+                return jsonify({'error': 'invalid_grant'}), 400
+            # Vérifier PKCE S256
+            expected = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+            if expected != auth_code.code_challenge:
+                return jsonify({'error': 'invalid_grant'}), 400
+        # Marquer code utilisé
+        auth_code.used_at = datetime.now(timezone.utc)
+        db.session.commit()
+        # Générer tokens
+        user = User.query.get(auth_code.user_id)
+        if not user:
+            return jsonify({'error': 'invalid_grant'}), 400
+        # Access token JWT
+        access_payload = {
+            'sub': str(user.id),
+            'aud': client.client_id,
+            'scope': auth_code.scope,
+            'email': user.email,
+            'name': user.username,
+            'is_admin': user.is_admin
+        }
+        access_token = _sign_jwt(access_payload, current_app.config['ACCESS_TOKEN_EXPIRE_SECONDS'], 'access')
+        # Refresh token (opaque, stocké hashé)
+        refresh_jti = str(uuid.uuid4())
+        refresh_token_value = base64.urlsafe_b64encode(os.urandom(40)).decode().rstrip('=')
+        refresh_hash = bcrypt.generate_password_hash(refresh_token_value).decode('utf-8')
+        refresh_exp = datetime.now(timezone.utc) + timedelta(seconds=current_app.config['REFRESH_TOKEN_EXPIRE_SECONDS'])
+        refresh_token = OAuth2Token(
+            jti=refresh_jti,
+            user_id=user.id,
+            client_id=client.client_id,
+            token_hash=refresh_hash,
+            scope=auth_code.scope,
+            access_token_jti=jwt.decode(access_token, options={'verify_signature': False})['jti'],
+            issued_at=datetime.now(timezone.utc),
+            expires_at=refresh_exp
+        )
+        db.session.add(refresh_token)
+        db.session.commit()
+        # id_token (OpenID)
+        id_payload = {
+            'sub': str(user.id),
+            'email': user.email,
+            'email_verified': True,
+            'name': user.username,
+            'preferred_username': user.username,
+            'updated_at': int(user.updated_at.timestamp()) if user.updated_at else 0,
+            'nonce': auth_code.nonce
+        }
+        id_token = _sign_jwt(id_payload, current_app.config['ACCESS_TOKEN_EXPIRE_SECONDS'], 'id')
+        return jsonify({
+            'access_token': access_token,
+            'token_type': 'Bearer',
+            'expires_in': current_app.config['ACCESS_TOKEN_EXPIRE_SECONDS'],
+            'refresh_token': refresh_token_value,
+            'scope': auth_code.scope,
+            'id_token': id_token
+        })
+    elif grant_type == 'refresh_token':
+        refresh_token_value = request.form.get('refresh_token')
+        if not refresh_token_value:
+            return jsonify({'error': 'invalid_request'}), 400
+        # Recherche du refresh token parmi ceux du client (vérification bcrypt)
+        candidates = OAuth2Token.query.filter_by(client_id=client.client_id).all()
+        found = None
+        for candidate in candidates:
+            if bcrypt.check_password_hash(candidate.token_hash, refresh_token_value):
+                found = candidate
+                break
+        if not found or not found.is_active():
+            return jsonify({'error': 'invalid_grant'}), 400
+        # Rotation : révoquer l'ancien et créer un nouveau
+        found.revoked_at = datetime.now(timezone.utc)
+        user = User.query.get(found.user_id)
+        new_access_payload = {
+            'sub': str(user.id),
+            'aud': client.client_id,
+            'scope': found.scope,
+            'email': user.email,
+            'name': user.username,
+            'is_admin': user.is_admin
+        }
+        new_access_token = _sign_jwt(new_access_payload, current_app.config['ACCESS_TOKEN_EXPIRE_SECONDS'], 'access')
+        new_refresh_jti = str(uuid.uuid4())
+        new_refresh_value = base64.urlsafe_b64encode(os.urandom(40)).decode().rstrip('=')
+        new_refresh_hash = bcrypt.generate_password_hash(new_refresh_value).decode('utf-8')
+        new_refresh = OAuth2Token(
+            jti=new_refresh_jti,
+            user_id=user.id,
+            client_id=client.client_id,
+            token_hash=new_refresh_hash,
+            scope=found.scope,
+            access_token_jti=jwt.decode(new_access_token, options={'verify_signature': False})['jti'],
+            issued_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=current_app.config['REFRESH_TOKEN_EXPIRE_SECONDS'])
+        )
+        db.session.add(new_refresh)
+        db.session.commit()
+        return jsonify({
+            'access_token': new_access_token,
+            'token_type': 'Bearer',
+            'expires_in': current_app.config['ACCESS_TOKEN_EXPIRE_SECONDS'],
+            'refresh_token': new_refresh_value,
+            'scope': found.scope
+        })
+    else:
+        return jsonify({'error': 'unsupported_grant_type'}), 400
+
+# ----------------------------------------------------------------------
+# /userinfo
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/userinfo')
+@limiter.limit("100 per minute")
+def userinfo():
+    auth = request.headers.get('Authorization')
+    if not auth or not auth.startswith('Bearer '):
+        return jsonify({'error': 'invalid_token'}), 401
+    token = auth.split(' ')[1]
+    try:
+        payload = _verify_bearer_token(token)
+    except BadRequest as e:
+        return jsonify({'error': 'invalid_token', 'description': str(e)}), 401
+    user = User.query.get(uuid.UUID(payload['sub']))
+    if not user:
+        return jsonify({'error': 'invalid_token'}), 401
+    return jsonify({
+        'sub': str(user.id),
+        'email': user.email,
+        'email_verified': True,
+        'name': user.username,
+        'preferred_username': user.username,
+        'updated_at': int(user.updated_at.timestamp()) if user.updated_at else 0
+    })
+
+# ----------------------------------------------------------------------
+# /revoke
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/revoke', methods=['POST'])
+def revoke():
+    # Authentification client (Basic ou POST) similaire à /token
+    auth = request.authorization
+    client_id = None
+    client_secret = None
+    if auth:
+        client_id = auth.username
+        client_secret = auth.password
+    else:
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+    if not client_id:
+        return jsonify({}), 200  # RFC 7009 : toujours 200 même en cas d'erreur
+    client = OAuth2Client.query.filter_by(client_id=client_id, is_active=True).first()
+    if client and client.is_confidential:
+        if not client_secret or not bcrypt.check_password_hash(client.client_secret_hash, client_secret):
+            return jsonify({}), 200
+    token = request.form.get('token')
+    token_type_hint = request.form.get('token_type_hint', 'access_token')
+    if token_type_hint in ('access_token', 'refresh_token'):
+        if token_type_hint == 'access_token':
+            try:
+                payload = jwt.decode(token, options={'verify_signature': False})
+                jti = payload.get('jti')
+                if jti:
+                    redis = get_redis()
+                    redis.setex(f'blacklist:{jti}', 3600, '1')
+            except:
+                pass
+        else:  # refresh_token
+            candidates = OAuth2Token.query.filter_by(client_id=client.client_id).all()
+            for candidate in candidates:
+                if bcrypt.check_password_hash(candidate.token_hash, token):
+                    candidate.revoked_at = datetime.now(timezone.utc)
+                    db.session.commit()
+                    break
+    return jsonify({}), 200
+
+@oauth2_bp.route('/callback')
+def debug_callback():
+    """Route temporaire pour afficher le code d'autorisation lors des tests."""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    return f"<h1>Code d'autorisation</h1><p><strong>code:</strong> {code}</p><p><strong>state:</strong> {state}</p><p>Copiez ce code pour l'échanger contre des tokens.</p>"
