@@ -172,11 +172,42 @@ def authorize():
     if not user:
         session.clear()
         return redirect(request.url)
-    # Enregistrer / mettre à jour le consentement (GDPR Article 7)
+    # Vérifier si un consentement actif couvre déjà les scopes demandés
     requested_scopes = list(set(scope.split()))
     consent = OAuth2Consent.query.filter_by(
         user_id=user.id, client_id=client.client_id
     ).first()
+    needs_consent = (
+        not consent
+        or not consent.is_active()
+        or not set(requested_scopes).issubset(set(consent.scopes or []))
+    )
+    if needs_consent:
+        if request.method == 'POST' and request.form.get('step') == 'consent':
+            if request.form.get('action') == 'deny':
+                params = {'error': 'access_denied', 'error_description': "L'utilisateur a refusé l'accès"}
+                if state:
+                    params['state'] = state
+                return redirect(f"{redirect_uri}?{urlencode(params)}")
+            # action == 'authorize' → enregistrer et continuer ci-dessous
+        else:
+            # Afficher la page de consentement (GET ou POST login)
+            _SCOPE_META = {
+                'openid':  {'label': 'Identité',  'desc': 'Accéder à votre identifiant unique', 'icon': 'fa-fingerprint'},
+                'email':   {'label': 'E-mail',    'desc': 'Lire votre adresse e-mail',          'icon': 'fa-envelope'},
+                'profile': {'label': 'Profil',    'desc': 'Lire votre nom et identifiant',      'icon': 'fa-user'},
+            }
+            scopes_display = [
+                {**_SCOPE_META.get(s, {'label': s, 'desc': f'Accéder à la ressource : {s}', 'icon': 'fa-key'}), 'scope': s}
+                for s in requested_scopes
+            ]
+            return render_template(
+                'consent.html',
+                client=client,
+                user=user,
+                scopes_display=scopes_display,
+            )
+    # Enregistrer / mettre à jour le consentement (GDPR Article 7)
     if consent and consent.is_active():
         existing = set(consent.scopes or [])
         new_scopes = set(requested_scopes)

@@ -21,9 +21,21 @@ def test_login_and_authorize(client, test_user, test_client):
         code_verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
         code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
 
-        resp2 = client.get(f'/authorize?response_type=code&client_id=test_client&redirect_uri=http://localhost/callback&scope=openid%20email&code_challenge={code_challenge}&code_challenge_method=S256&state=xyz')
-        assert resp2.status_code == 302  # redirection vers callback avec code
-        location = resp2.headers['Location']
+        authorize_url = (
+            f'/authorize?response_type=code&client_id=test_client'
+            f'&redirect_uri=http://localhost/callback&scope=openid%20email'
+            f'&code_challenge={code_challenge}&code_challenge_method=S256&state=xyz'
+        )
+
+        # Première visite : page de consentement
+        resp2 = client.get(authorize_url)
+        assert resp2.status_code == 200
+        assert b'Autoriser' in resp2.data
+
+        # L'utilisateur clique "Autoriser"
+        resp2b = client.post(authorize_url, data={'step': 'consent', 'action': 'authorize'})
+        assert resp2b.status_code == 302  # redirection vers callback avec code
+        location = resp2b.headers['Location']
         assert 'code=' in location
 
         from urllib.parse import urlparse, parse_qs
