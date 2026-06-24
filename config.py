@@ -25,9 +25,25 @@ def _get_aes_key() -> bytes:
     return secrets.token_bytes(32)
 
 
+def _get_secret_key() -> str:
+    """Retourne SECRET_KEY depuis l'environnement.
+    Production : lève RuntimeError si absente.
+    Dev/test : génère une clé aléatoire par démarrage.
+    """
+    key = os.environ.get("SECRET_KEY", "")
+    if key:
+        return key
+    if os.environ.get("FLASK_ENV") == "production":
+        raise RuntimeError(
+            "SECRET_KEY doit être définie en production. "
+            "Générez-la avec : python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    return secrets.token_hex(32)
+
+
 class Config:
     # ── Flask ─────────────────────────────────────────────────────────────
-    SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
+    SECRET_KEY: str = _get_secret_key()
     DEBUG: bool = False
     TESTING: bool = False
 
@@ -95,6 +111,8 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     # NullPool : aucun pool de connexions en tests.
     SQLALCHEMY_ENGINE_OPTIONS = {"poolclass": NullPool}
+    # Désactiver le rate limiting en tests (les compteurs Redis persistent entre les runs)
+    RATELIMIT_ENABLED = False
 
 
 class ProductionConfig(Config):
