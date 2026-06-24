@@ -1,0 +1,6 @@
+# Ignore all template files and directories
+**/template/**
+**/templates/**
+*.template
+*.tmpl
+*.tpl

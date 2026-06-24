@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sso_user
+      POSTGRES_PASSWORD: sso_pass
+      POSTGRES_DB: sso_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # ✅ FIX: ajout de -d sso_db pour éviter "database sso_user does not exist"
+      test: ["CMD-SHELL", "pg_isready -U sso_user -d sso_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Surcharge les valeurs .env pour Docker (résolution des noms de services)
+      DATABASE_URL: postgresql://sso_user:sso_pass@db:5432/sso_db
+      REDIS_URL: redis://redis:6379/0
+      FLASK_APP: wsgi:app
+      FLASK_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+      - ./tests:/app/tests
+    command:
+      [
+        "gunicorn",
+        "--bind",
+        "0.0.0.0:8000",
+        "--workers",
+        "2",
+        "--timeout",
+        "30",
+        "--reload",
+        "wsgi:app",
+      ]
+
+volumes:
+  postgres_data:
+  redis_data:

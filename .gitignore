@@ -1,0 +1,52 @@
+# Environnement Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Variables d'environnement — JAMAIS committer !
+.env
+*.env.local
+
+# Base de données locale
+*.db
+*.sqlite
+
+# Migrations auto-générées (conserver env.py et alembic.ini)
+# migrations/versions/*.py  ← NE PAS ignorer, committer les migrations !
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+.dockerignore
+
+# macOS
+.DS_Store
+
+# Clés et secrets (protection supplémentaire)
+*.pem
+*.key
+*.p12
+*.pfx
+private_keys/
+
+.claude/
