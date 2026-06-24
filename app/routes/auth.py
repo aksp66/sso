@@ -2,12 +2,15 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.extensions import bcrypt, db, limiter, get_redis
 from app.models.user import User
+from app.models.oauth2_token import OAuth2Token
+from app.models.oauth2_client import OAuth2Client
 from app.models.audit_log import (
     AuditLog,
     EVENT_LOGIN_SUCCESS,
     EVENT_LOGIN_FAILURE,
     EVENT_ACCOUNT_LOCKED,
     EVENT_LOGOUT,
+    EVENT_TOKEN_REVOKED,
 )
 from app.services.session_service import create_user_session
 import uuid
@@ -111,7 +114,67 @@ def profile():
     if not user:
         session.clear()
         return redirect(url_for('auth.login'))
-    return render_template('profile.html', user=user)
+    # UC-05 : applications connectées (tokens actifs groupés par client)
+    now = datetime.now(timezone.utc)
+    active_tokens = (
+        OAuth2Token.query
+        .filter_by(user_id=user.id)
+        .filter(OAuth2Token.revoked_at.is_(None))
+        .filter(OAuth2Token.expires_at > now)
+        .order_by(OAuth2Token.issued_at.desc())
+        .all()
+    )
+    seen_clients: dict = {}
+    for token in active_tokens:
+        if token.client_id not in seen_clients:
+            client = OAuth2Client.query.filter_by(client_id=token.client_id).first()
+            if client:
+                seen_clients[token.client_id] = {
+                    'client': client,
+                    'scope': token.scope,
+                    'issued_at': token.issued_at,
+                }
+    connected_apps = list(seen_clients.values())
+    return render_template('profile.html', user=user, connected_apps=connected_apps)
+
+
+@auth_bp.route('/profile/revoke-app', methods=['POST'])
+def revoke_app():
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    client_id = request.form.get('client_id')
+    if not client_id:
+        flash('Client ID manquant.', 'danger')
+        return redirect(url_for('auth.profile'))
+    now = datetime.now(timezone.utc)
+    tokens = (
+        OAuth2Token.query
+        .filter_by(user_id=user.id, client_id=client_id)
+        .filter(OAuth2Token.revoked_at.is_(None))
+        .filter(OAuth2Token.expires_at > now)
+        .all()
+    )
+    redis = get_redis()
+    for token in tokens:
+        token.revoked_at = now
+        # Invalider aussi le dernier access token lié
+        if token.access_token_jti:
+            redis.setex(f'blacklist:{token.access_token_jti}', 3600, '1')
+    AuditLog.log(
+        event_type=EVENT_TOKEN_REVOKED,
+        ip_address=request.remote_addr,
+        user_id=user.id,
+        client_id=client_id,
+        user_agent=request.user_agent.string,
+        details={'token_type': 'user_initiated_revoke', 'count': len(tokens)},
+    )
+    db.session.commit()
+    flash('Accès de l\'application révoqué avec succès.', 'success')
+    return redirect(url_for('auth.profile'))
 
 @auth_bp.route('/logout')
 def logout():
