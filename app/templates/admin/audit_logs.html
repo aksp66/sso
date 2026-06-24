@@ -1,0 +1,181 @@
+{% extends "admin/layout.html" %}
+{% block title %}Journal d'audit{% endblock %}
+
+{% block admin_content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <i class="fas fa-clock-rotate-left" style="color:var(--blue-400); font-size:20px;"></i>
+      Journal d'audit
+    </div>
+    <div class="topbar-breadcrumb">Admin / Supervision des événements</div>
+  </div>
+  <!-- Export CSV futur -->
+  <button class="btn-outline" onclick="exportCSV()" title="Exporter en CSV">
+    <i class="fas fa-download"></i> Exporter
+  </button>
+</div>
+
+<!-- Résumé stats -->
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:24px;">
+  {% set total = logs|length if logs else 0 %}
+  <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:12px; padding:18px 20px;">
+    <div style="font-family:'Outfit',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
+      <i class="fas fa-list" style="margin-right:4px;"></i> Événements affichés
+    </div>
+    <div style="font-family:'Outfit',sans-serif; font-size:28px; font-weight:800; color:var(--text-primary);">
+      {{ logs|length if logs else 0 }}
+    </div>
+  </div>
+  <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:12px; padding:18px 20px;">
+    <div style="font-family:'Outfit',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
+      <i class="fas fa-page" style="margin-right:4px;"></i> Page actuelle
+    </div>
+    <div style="font-family:'Outfit',sans-serif; font-size:28px; font-weight:800; color:var(--text-primary);">
+      {% if pagination %}{{ pagination.page }} / {{ pagination.pages }}{% else %}1{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px;">
+        Événements de sécurité
+      </span>
+      <span class="badge badge-blue">Du plus récent au plus ancien</span>
+    </div>
+    <!-- Filtre par type -->
+    <select id="filter-type"
+            onchange="filterLogs()"
+            style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                   color:var(--text-secondary); border-radius:8px; padding:7px 12px;
+                   font-family:'Outfit',sans-serif; font-size:12px; outline:none; cursor:pointer;">
+      <option value="">Tous les types</option>
+      <option value="login">Connexion</option>
+      <option value="logout">Déconnexion</option>
+      <option value="2fa">2FA</option>
+      <option value="admin">Admin</option>
+      <option value="failed">Échec</option>
+    </select>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="data-table" id="audit-table">
+      <thead>
+        <tr>
+          <th>Horodatage</th>
+          <th>Événement</th>
+          <th>Utilisateur</th>
+          <th>Adresse IP</th>
+          <th>Détails</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr data-type="{{ log.event_type | lower }}">
+          <td style="white-space:nowrap; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">
+            {{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+          </td>
+          <td>
+            {% set ev = log.event_type | lower %}
+            {% if 'login' in ev and 'fail' not in ev %}
+              <span class="badge badge-green"><i class="fas fa-right-to-bracket"></i> {{ log.event_type }}</span>
+            {% elif 'logout' in ev %}
+              <span class="badge badge-gray"><i class="fas fa-right-from-bracket"></i> {{ log.event_type }}</span>
+            {% elif 'fail' in ev or 'error' in ev or 'invalid' in ev %}
+              <span class="badge badge-red"><i class="fas fa-xmark-circle"></i> {{ log.event_type }}</span>
+            {% elif '2fa' in ev or 'totp' in ev %}
+              <span class="badge badge-blue"><i class="fas fa-shield-halved"></i> {{ log.event_type }}</span>
+            {% elif 'admin' in ev or 'created' in ev or 'updated' in ev %}
+              <span class="badge badge-yellow"><i class="fas fa-gear"></i> {{ log.event_type }}</span>
+            {% else %}
+              <span class="badge badge-gray">{{ log.event_type }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if log.user_id %}
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">
+                {{ log.user_id | string | truncate(18, true, '…') }}
+              </span>
+            {% else %}
+              <span style="color:var(--text-muted); font-size:12px;">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <code style="font-size:12px;">{{ log.ip_address or '—' }}</code>
+          </td>
+          <td style="max-width:300px;">
+            {% if log.details %}
+              <div style="font-size:11px; color:var(--text-muted); font-family:'JetBrains Mono',monospace;
+                          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                   title="{{ log.details | tojson }}">
+                {{ log.details | tojson | truncate(60, true, '…') }}
+              </div>
+            {% else %}
+              <span style="color:var(--text-muted); font-size:12px;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" style="text-align:center; padding:50px; color:var(--text-muted);">
+            <i class="fas fa-clock-rotate-left" style="font-size:32px; margin-bottom:12px; display:block; opacity:0.3;"></i>
+            Aucun événement d'audit enregistré
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if pagination and pagination.pages > 1 %}
+  <div class="pagination">
+    {% if pagination.has_prev %}
+      <a href="{{ url_for('admin.audit_logs', page=pagination.prev_num) }}" class="page-btn">
+        <i class="fas fa-chevron-left"></i> Précédent
+      </a>
+    {% endif %}
+    <span class="page-info">Page {{ pagination.page }} / {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+      <a href="{{ url_for('admin.audit_logs', page=pagination.next_num) }}" class="page-btn">
+        Suivant <i class="fas fa-chevron-right"></i>
+      </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function filterLogs() {
+  const val = document.getElementById('filter-type').value.toLowerCase();
+  document.querySelectorAll('#audit-table tbody tr[data-type]').forEach(row => {
+    const type = row.dataset.type || '';
+    row.style.display = (!val || type.includes(val)) ? '' : 'none';
+  });
+}
+
+function exportCSV() {
+  const rows = [['Horodatage','Événement','Utilisateur','IP','Détails']];
+  document.querySelectorAll('#audit-table tbody tr[data-type]').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length >= 5) {
+      rows.push([
+        cells[0].innerText.trim(),
+        cells[1].innerText.trim(),
+        cells[2].innerText.trim(),
+        cells[3].innerText.trim(),
+        cells[4].innerText.trim()
+      ]);
+    }
+  });
+  const csv = rows.map(r => r.map(c => '"'+c.replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'audit_logs_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+</script>
+{% endblock %}

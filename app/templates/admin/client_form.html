@@ -1,0 +1,151 @@
+{% extends "admin/layout.html" %}
+{% block title %}{{ 'Modifier' if client else 'Nouveau' }} client OAuth2{% endblock %}
+
+{% block admin_content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <i class="fas fa-plug" style="color:var(--blue-400); font-size:20px;"></i>
+      {{ 'Modifier le client' if client else 'Nouveau client OAuth2' }}
+    </div>
+    <div class="topbar-breadcrumb">
+      Admin /
+      <a href="{{ url_for('admin.clients') }}" style="color:var(--blue-400); text-decoration:none;">Clients OAuth2</a>
+      / {{ 'Modifier' if client else 'Créer' }}
+    </div>
+  </div>
+  <a href="{{ url_for('admin.clients') }}" class="btn-outline">
+    <i class="fas fa-arrow-left"></i> Retour
+  </a>
+</div>
+
+<div style="max-width:640px;">
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px;">
+        Configuration de l'application
+      </span>
+      {% if client %}
+        <code style="font-size:11px;">{{ client.client_id }}</code>
+      {% endif %}
+    </div>
+
+    <form method="POST" style="padding:28px 24px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <!-- Nom -->
+      <div style="margin-bottom:18px;">
+        <label class="label">
+          <i class="fas fa-tag" style="margin-right:5px; color:var(--blue-400);"></i>
+          Nom de l'application <span style="color:#F87171;">*</span>
+        </label>
+        <div class="input-wrap" style="position:relative;">
+          <i class="fas fa-tag input-icon"></i>
+          <input type="text" name="client_name"
+                 value="{{ client.client_name if client else '' }}"
+                 placeholder="Mon Application"
+                 required
+                 class="input-field" />
+        </div>
+      </div>
+
+      <!-- URIs de redirection -->
+      <div style="margin-bottom:18px;">
+        <label class="label">
+          <i class="fas fa-link" style="margin-right:5px; color:var(--blue-400);"></i>
+          URIs de redirection <span style="color:#F87171;">*</span>
+        </label>
+        <textarea name="redirect_uris"
+                  rows="4"
+                  placeholder="https://monapp.com/callback&#10;https://monapp.com/auth"
+                  required
+                  style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                         border-radius:10px; color:var(--text-primary); padding:12px 14px;
+                         font-family:'JetBrains Mono',monospace; font-size:12px; outline:none;
+                         resize:vertical; transition:all 0.2s; line-height:1.6;"
+                  onfocus="this.style.borderColor='var(--blue-500)'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)'"
+                  onblur="this.style.borderColor='var(--glass-border)'; this.style.boxShadow='none'">{{ '\n'.join(client.redirect_uris) if client else '' }}</textarea>
+        <p style="font-size:11px; color:var(--text-muted); margin-top:5px;">
+          <i class="fas fa-info-circle" style="margin-right:3px;"></i>
+          Une URI par ligne.
+        </p>
+      </div>
+
+      <!-- Scopes -->
+      <div style="margin-bottom:22px;">
+        <label class="label">
+          <i class="fas fa-list-check" style="margin-right:5px; color:var(--blue-400);"></i>
+          Scopes autorisés
+        </label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          {% set available_scopes = ['openid', 'profile', 'email', 'groups', 'offline_access'] %}
+          {% set selected = client.allowed_scopes if client else ['openid', 'profile', 'email'] %}
+          {% for scope in available_scopes %}
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;
+                        background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                        border-radius:8px; padding:8px 14px; transition:all 0.2s;
+                        font-family:'Outfit',sans-serif; font-size:13px; color:var(--text-secondary);">
+            <input type="checkbox" name="scopes" value="{{ scope }}"
+                   {% if scope in selected %}checked{% endif %}
+                   style="accent-color:var(--blue-500);" />
+            <code style="background:none; border:none; padding:0; font-size:12px; color:var(--accent);">{{ scope }}</code>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Options -->
+      <p style="font-family:'Outfit',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:14px;">
+        Options
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px;">
+        <!-- Confidentiel -->
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                      background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                      border-radius:10px; padding:14px; transition:all 0.2s;"
+               onmouseover="this.style.borderColor='var(--glass-border-hover)'"
+               onmouseout="this.style.borderColor='var(--glass-border)'">
+          <input type="checkbox" name="confidential"
+                 {% if client and client.is_confidential %}checked{% endif %}
+                 style="width:16px; height:16px; accent-color:var(--blue-500);" />
+          <div>
+            <div style="font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; color:var(--text-primary);">
+              <i class="fas fa-lock" style="color:var(--blue-400); margin-right:5px;"></i> Client confidentiel
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Génère un client_secret</div>
+          </div>
+        </label>
+
+        <!-- Actif -->
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                      background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                      border-radius:10px; padding:14px; transition:all 0.2s;"
+               onmouseover="this.style.borderColor='var(--glass-border-hover)'"
+               onmouseout="this.style.borderColor='var(--glass-border)'">
+          <input type="checkbox" name="is_active"
+                 {% if not client or client.is_active %}checked{% endif %}
+                 style="width:16px; height:16px; accent-color:#22C55E;" />
+          <div>
+            <div style="font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; color:var(--text-primary);">
+              <i class="fas fa-circle-check" style="color:#4ADE80; margin-right:5px;"></i> Client actif
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Autorise les connexions</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <a href="{{ url_for('admin.clients') }}" class="btn-outline">Annuler</a>
+        <button type="submit" class="btn-primary" style="width:auto; padding:10px 24px;">
+          <i class="fas fa-{{ 'floppy-disk' if client else 'plus-circle' }}"></i>
+          {{ 'Enregistrer' if client else 'Créer le client' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

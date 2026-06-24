@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ title | default('SSO') }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .admin-shell {
+    display:flex; min-height:100vh;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width:240px; flex-shrink:0;
+    background:rgba(10,22,40,0.85);
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border-right:1px solid var(--glass-border);
+    display:flex; flex-direction:column;
+    position:sticky; top:0; height:100vh;
+    overflow-y:auto;
+  }
+
+  .sidebar-logo {
+    padding:24px 20px 20px;
+    border-bottom:1px solid var(--glass-border);
+    display:flex; align-items:center; gap:12px;
+  }
+  .sidebar-logo .logo-icon {
+    width:36px; height:36px;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; color:#fff; flex-shrink:0;
+    box-shadow:0 4px 12px rgba(29,78,216,0.4);
+  }
+  .sidebar-logo .logo-text {
+    font-family:'Outfit',sans-serif;
+    font-size:16px; font-weight:800;
+    letter-spacing:-0.02em;
+    color:var(--text-primary);
+  }
+  .sidebar-logo .logo-sub {
+    font-size:10px; color:var(--text-muted);
+    font-family:'Outfit',sans-serif;
+    font-weight:500; letter-spacing:0.08em;
+  }
+
+  .nav-section-label {
+    padding:16px 20px 6px;
+    font-family:'Outfit',sans-serif;
+    font-size:10px; font-weight:700;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+  }
+
+  .nav-link {
+    display:flex; align-items:center; gap:11px;
+    padding:11px 20px;
+    font-family:'Outfit',sans-serif;
+    font-size:13px; font-weight:500;
+    color:var(--text-secondary);
+    text-decoration:none;
+    border-radius:0;
+    transition:all 0.18s;
+    border-left:3px solid transparent;
+    margin:1px 0;
+    position:relative;
+  }
+  .nav-link .nav-icon {
+    width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:8px;
+    background:rgba(255,255,255,0.04);
+    font-size:13px;
+    transition:all 0.18s;
+    flex-shrink:0;
+  }
+  .nav-link:hover {
+    color:var(--text-primary);
+    background:rgba(255,255,255,0.04);
+  }
+  .nav-link:hover .nav-icon {
+    background:rgba(37,99,235,0.2);
+    color:var(--blue-400);
+  }
+  .nav-link.active {
+    color:var(--text-primary);
+    background:rgba(29,78,216,0.12);
+    border-left-color:var(--blue-500);
+  }
+  .nav-link.active .nav-icon {
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    color:#fff;
+    box-shadow:0 4px 10px rgba(29,78,216,0.35);
+  }
+
+  .sidebar-footer {
+    margin-top:auto;
+    padding:16px 20px;
+    border-top:1px solid var(--glass-border);
+  }
+
+  /* ── Zone principale ── */
+  .admin-main {
+    flex:1;
+    padding:32px 28px;
+    overflow-x:hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:28px;
+  }
+  .topbar-title {
+    font-family:'Outfit',sans-serif;
+    font-size:22px; font-weight:800;
+    letter-spacing:-0.025em;
+    display:flex; align-items:center; gap:10px;
+  }
+  .topbar-breadcrumb {
+    font-size:12px; color:var(--text-muted); margin-top:2px;
+    font-family:'Plus Jakarta Sans',sans-serif;
+  }
+
+  /* ── Contenu admin ── */
+  .admin-card {
+    background:rgba(255,255,255,0.04);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--glass-border);
+    border-radius:16px;
+    overflow:hidden;
+  }
+  .admin-card-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 24px;
+    border-bottom:1px solid var(--glass-border);
+  }
+
+  /* ── Tableau ── */
+  .data-table {
+    width:100%; border-collapse:collapse;
+  }
+  .data-table thead th {
+    padding:12px 16px;
+    font-family:'Outfit',sans-serif;
+    font-size:11px; font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    text-align:left;
+    background:rgba(255,255,255,0.02);
+    border-bottom:1px solid var(--glass-border);
+    white-space:nowrap;
+  }
+  .data-table tbody td {
+    padding:14px 16px;
+    font-size:13px; color:var(--text-secondary);
+    border-bottom:1px solid rgba(255,255,255,0.04);
+    vertical-align:middle;
+  }
+  .data-table tbody tr:last-child td { border-bottom:none; }
+  .data-table tbody tr {
+    transition:background 0.15s;
+  }
+  .data-table tbody tr:hover {
+    background:rgba(255,255,255,0.03);
+  }
+  .data-table tbody td:first-child { color:var(--text-primary); font-weight:500; }
+
+  /* ── Pagination ── */
+  .pagination {
+    display:flex; align-items:center; justify-content:center;
+    gap:6px; padding:16px 24px;
+    border-top:1px solid var(--glass-border);
+  }
+  .page-btn {
+    display:inline-flex; align-items:center; gap:5px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid var(--glass-border);
+    color:var(--text-secondary);
+    font-family:'Outfit',sans-serif; font-size:12px; font-weight:600;
+    padding:6px 14px; border-radius:8px;
+    text-decoration:none; transition:all 0.18s;
+  }
+  .page-btn:hover {
+    background:rgba(255,255,255,0.10);
+    border-color:var(--glass-border-hover);
+    color:var(--text-primary);
+  }
+  .page-info {
+    font-size:12px; color:var(--text-muted);
+    font-family:'Outfit',sans-serif; padding:0 8px;
+  }
+
+  /* ── Actions dans le tableau ── */
+  .action-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:30px; height:30px;
+    border-radius:8px;
+    border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.04);
+    color:var(--text-muted);
+    font-size:12px;
+    cursor:pointer;
+    transition:all 0.18s;
+    text-decoration:none;
+  }
+  .action-btn:hover {
+    background:rgba(255,255,255,0.10);
+    color:var(--text-primary);
+    border-color:var(--glass-border-hover);
+  }
+  .action-btn.edit:hover  { background:rgba(59,130,246,0.15); color:var(--blue-400); border-color:rgba(59,130,246,0.3); }
+  .action-btn.warn:hover  { background:rgba(234,179,8,0.15);  color:#FBBF24; border-color:rgba(234,179,8,0.3); }
+  .action-btn.danger:hover{ background:rgba(239,68,68,0.15);  color:#F87171; border-color:rgba(239,68,68,0.3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+      <div>
+        <div class="logo-text">SSO Admin</div>
+        <div class="logo-sub">PANNEAU DE CONTRÔLE</div>
+      </div>
+    </div>
+
+    <nav style="padding:8px 0; flex:1;">
+      <div class="nav-section-label">Gestion</div>
+
+      <a href="{{ url_for('admin.users') }}"
+         class="nav-link {% if request.endpoint == 'admin.users' or request.endpoint == 'admin.new_user' or request.endpoint == 'admin.edit_user' %}active{% endif %}">
+        <span class="nav-icon"><i class="fas fa-users"></i></span>
+        Utilisateurs
+      </a>
+
+      <a href="{{ url_for('admin.clients') }}"
+         class="nav-link {% if request.endpoint == 'admin.clients' or request.endpoint == 'admin.new_client' or request.endpoint == 'admin.edit_client' %}active{% endif %}">
+        <span class="nav-icon"><i class="fas fa-plug"></i></span>
+        Clients OAuth2
+      </a>
+
+      <div class="nav-section-label" style="margin-top:8px;">Supervision</div>
+
+      <a href="{{ url_for('admin.audit_logs') }}"
+         class="nav-link {% if request.endpoint == 'admin.audit_logs' %}active{% endif %}">
+        <span class="nav-icon"><i class="fas fa-clock-rotate-left"></i></span>
+        Journal d'audit
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="{{ url_for('auth.profile') }}" class="nav-link" style="border-radius:10px; margin:0;">
+        <span class="nav-icon"><i class="fas fa-arrow-left"></i></span>
+        Retour au profil
+      </a>
+    </div>
+  </aside>
+
+  <!-- ── Contenu principal ── -->
+  <main class="admin-main">
+
+    <!-- Alertes flash -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'danger' else ('warning' if category == 'warning' else 'info')) }}" style="margin-bottom:20px;">
+            <i class="fas fa-{{ 'check-circle' if category == 'success' else ('exclamation-circle' if category == 'danger' else ('exclamation-triangle' if category == 'warning' else 'info-circle')) }}"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block admin_content %}{% endblock %}
+  </main>
+
+</div>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "admin/layout.html" %}
+{% block title %}Clients OAuth2{% endblock %}
+
+{% block admin_content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <i class="fas fa-plug" style="color:var(--blue-400); font-size:20px;"></i>
+      Clients OAuth2
+    </div>
+    <div class="topbar-breadcrumb">Admin / Applications enregistrées</div>
+  </div>
+  <a href="{{ url_for('admin.new_client') }}" class="btn-primary" style="width:auto; padding:10px 18px;">
+    <i class="fas fa-plus"></i> Nouveau client
+  </a>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px;">
+        Applications enregistrées
+      </span>
+      <span class="badge badge-blue">{{ clients|length }} client{{ 's' if clients|length != 1 }}</span>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Client ID</th>
+          <th>Type</th>
+          <th>Scopes autorisés</th>
+          <th>Statut</th>
+          <th>Créé le</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr>
+          <td>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:32px; height:32px; border-radius:9px;
+                          background:linear-gradient(135deg,#0369A1,#075985);
+                          display:flex; align-items:center; justify-content:center;
+                          font-family:'Outfit',sans-serif; font-weight:700; font-size:13px; color:#fff; flex-shrink:0;">
+                {{ client.client_name[0].upper() }}
+              </div>
+              <span style="font-weight:600; color:var(--text-primary);">{{ client.client_name }}</span>
+            </div>
+          </td>
+          <td>
+            <code style="font-size:11px;">{{ client.client_id }}</code>
+          </td>
+          <td>
+            {% if client.is_confidential %}
+              <span class="badge badge-blue"><i class="fas fa-lock"></i> Confidentiel</span>
+            {% else %}
+              <span class="badge badge-gray"><i class="fas fa-lock-open"></i> Public</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+              {% for scope in client.allowed_scopes %}
+                <span class="badge badge-gray" style="font-size:10px;">{{ scope }}</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td>
+            {% if client.is_active %}
+              <span class="badge badge-green"><i class="fas fa-circle" style="font-size:7px;"></i> Actif</span>
+            {% else %}
+              <span class="badge badge-red"><i class="fas fa-ban"></i> Désactivé</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted); font-size:12px;">
+            {{ client.created_at.strftime('%d/%m/%Y') }}
+          </td>
+          <td>
+            <a href="{{ url_for('admin.edit_client', client_id=client.client_id) }}"
+               class="action-btn edit" title="Modifier">
+              <i class="fas fa-pen"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center; padding:50px; color:var(--text-muted);">
+            <i class="fas fa-plug" style="font-size:32px; margin-bottom:12px; display:block; opacity:0.3;"></i>
+            Aucun client OAuth2 enregistré
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

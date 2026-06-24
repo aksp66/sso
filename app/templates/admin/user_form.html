@@ -1,0 +1,153 @@
+{% extends "admin/layout.html" %}
+{% block title %}{{ 'Modifier' if user else 'Nouvel' }} utilisateur{% endblock %}
+
+{% block admin_content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <i class="fas fa-{{ 'pen' if user else 'user-plus' }}" style="color:var(--blue-400); font-size:20px;"></i>
+      {{ 'Modifier l\'utilisateur' if user else 'Nouvel utilisateur' }}
+    </div>
+    <div class="topbar-breadcrumb">
+      Admin /
+      <a href="{{ url_for('admin.users') }}" style="color:var(--blue-400); text-decoration:none;">Utilisateurs</a>
+      / {{ 'Modifier' if user else 'Créer' }}
+    </div>
+  </div>
+  <a href="{{ url_for('admin.users') }}" class="btn-outline">
+    <i class="fas fa-arrow-left"></i> Retour
+  </a>
+</div>
+
+<div style="max-width:600px;">
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px;">
+        {{ 'Informations du compte' if user else 'Créer un compte utilisateur' }}
+      </span>
+      {% if user %}
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:28px; height:28px; border-radius:7px;
+                      background:linear-gradient(135deg,#1D4ED8,#0369A1);
+                      display:flex; align-items:center; justify-content:center;
+                      font-family:'Outfit',sans-serif; font-size:12px; font-weight:700; color:#fff;">
+            {{ user.username[0].upper() }}
+          </div>
+          <span style="font-size:13px; color:var(--text-muted);">{{ user.username }}</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <form method="POST" style="padding:28px 24px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <!-- Nom d'utilisateur -->
+      <div style="margin-bottom:18px;">
+        <label class="label">
+          <i class="fas fa-user" style="margin-right:5px; color:var(--blue-400);"></i>
+          Nom d'utilisateur <span style="color:#F87171;">*</span>
+        </label>
+        <div class="input-wrap" style="position:relative;">
+          <i class="fas fa-at input-icon"></i>
+          <input type="text" name="username"
+                 value="{{ user.username if user else '' }}"
+                 placeholder="nom_utilisateur"
+                 required
+                 class="input-field" />
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div style="margin-bottom:18px;">
+        <label class="label">
+          <i class="fas fa-envelope" style="margin-right:5px; color:var(--blue-400);"></i>
+          Adresse e-mail <span style="color:#F87171;">*</span>
+        </label>
+        <div class="input-wrap" style="position:relative;">
+          <i class="fas fa-envelope input-icon"></i>
+          <input type="email" name="email"
+                 value="{{ user.email if user else '' }}"
+                 placeholder="utilisateur@exemple.com"
+                 required
+                 class="input-field" />
+        </div>
+      </div>
+
+      <!-- Mot de passe -->
+      <div style="margin-bottom:22px;">
+        <label class="label">
+          <i class="fas fa-lock" style="margin-right:5px; color:var(--blue-400);"></i>
+          Mot de passe {{ '(laisser vide pour ne pas modifier)' if user else '' }}
+          {% if not user %}<span style="color:#F87171;">*</span>{% endif %}
+        </label>
+        <div class="input-wrap" style="position:relative;">
+          <i class="fas fa-lock input-icon"></i>
+          <input type="password" name="password"
+                 placeholder="{{ '••••••••' if user else 'Nouveau mot de passe' }}"
+                 {% if not user %}required{% endif %}
+                 class="input-field" />
+        </div>
+        {% if user %}
+          <p style="font-size:11px; color:var(--text-muted); margin-top:5px;">
+            <i class="fas fa-info-circle" style="margin-right:3px;"></i>
+            Laissez vide pour conserver le mot de passe actuel.
+          </p>
+        {% endif %}
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Permissions -->
+      <p style="font-family:'Outfit',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:14px;">
+        Permissions et statut
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px;">
+        <!-- Admin -->
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                      background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                      border-radius:10px; padding:14px; transition:all 0.2s;"
+               x-data onmouseover="this.style.borderColor='var(--glass-border-hover)'"
+               onmouseout="this.style.borderColor='var(--glass-border)'">
+          <input type="checkbox" name="is_admin"
+                 {% if user and user.is_admin %}checked{% endif %}
+                 style="width:16px; height:16px; accent-color:var(--blue-500);" />
+          <div>
+            <div style="font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; color:var(--text-primary);">
+              <i class="fas fa-crown" style="color:#FBBF24; margin-right:5px;"></i> Administrateur
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Accès au panneau admin</div>
+          </div>
+        </label>
+
+        <!-- Actif -->
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                      background:rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+                      border-radius:10px; padding:14px; transition:all 0.2s;"
+               onmouseover="this.style.borderColor='var(--glass-border-hover)'"
+               onmouseout="this.style.borderColor='var(--glass-border)'">
+          <input type="checkbox" name="is_active"
+                 {% if not user or user.is_active %}checked{% endif %}
+                 style="width:16px; height:16px; accent-color:#22C55E;" />
+          <div>
+            <div style="font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; color:var(--text-primary);">
+              <i class="fas fa-circle-check" style="color:#4ADE80; margin-right:5px;"></i> Compte actif
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Permet la connexion</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <a href="{{ url_for('admin.users') }}" class="btn-outline">Annuler</a>
+        <button type="submit" class="btn-primary" style="width:auto; padding:10px 24px;">
+          <i class="fas fa-{{ 'floppy-disk' if user else 'user-plus' }}"></i>
+          {{ 'Enregistrer' if user else 'Créer l\'utilisateur' }}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+{% endblock %}
