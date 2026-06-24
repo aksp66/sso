@@ -13,7 +13,9 @@ from app.models.audit_log import (
     EVENT_TOKEN_REVOKED,
 )
 from app.services.session_service import create_user_session
+from app.services.email_service import send_password_reset_email
 import uuid
+import secrets
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -175,6 +177,64 @@ def revoke_app():
     db.session.commit()
     flash('Accès de l\'application révoqué avec succès.', 'success')
     return redirect(url_for('auth.profile'))
+
+_RESET_TTL = 3600  # 1 heure
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        user = User.query.filter_by(email=email).first()
+        if user and user.is_active:
+            token = secrets.token_urlsafe(32)
+            redis = get_redis()
+            redis.setex(f'pwd_reset:{token}', _RESET_TTL, str(user.id))
+            reset_link = url_for('auth.reset_password', token=token, _external=True)
+            try:
+                send_password_reset_email(user.email, reset_link)
+            except Exception as exc:
+                current_app.logger.error(f"Envoi email reset échoué pour {email}: {exc}")
+        # Toujours afficher le même message (anti-énumération d'e-mails)
+        flash('Si cet e-mail est enregistré, un lien vous a été envoyé.', 'info')
+        return redirect(url_for('auth.login'))
+    return render_template('forgot_password.html')
+
+
+@auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token: str):
+    redis = get_redis()
+    user_id_bytes = redis.get(f'pwd_reset:{token}')
+    if not user_id_bytes:
+        flash('Lien invalide ou expiré.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    user = User.query.get(uuid.UUID(user_id_bytes.decode()))
+    if not user:
+        flash('Utilisateur introuvable.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if len(password) < 8:
+            flash('Le mot de passe doit comporter au moins 8 caractères.', 'danger')
+            return render_template('reset_password.html', token=token)
+        if password != confirm:
+            flash('Les mots de passe ne correspondent pas.', 'danger')
+            return render_template('reset_password.html', token=token)
+        user.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        # Invalider le token de reset
+        redis.delete(f'pwd_reset:{token}')
+        AuditLog.log(
+            event_type='password_reset',
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            user_agent=request.user_agent.string,
+        )
+        db.session.commit()
+        flash('Mot de passe réinitialisé. Vous pouvez vous connecter.', 'success')
+        return redirect(url_for('auth.login'))
+    return render_template('reset_password.html', token=token)
+
 
 @auth_bp.route('/logout')
 def logout():
