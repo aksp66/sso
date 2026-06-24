@@ -420,7 +420,10 @@ def revoke():
                 jti = payload.get('jti')
                 if jti:
                     redis = get_redis()
-                    redis.setex(f'blacklist:{jti}', 3600, '1')
+                    # TTL = durée restante du token (pas hardcodé à 3600s)
+                    now_ts = int(datetime.now(timezone.utc).timestamp())
+                    ttl = max(payload.get('exp', now_ts) - now_ts, 1)
+                    redis.setex(f'blacklist:{jti}', ttl, '1')
             except (jwt.DecodeError, KeyError):
                 pass
         else:  # refresh_token
