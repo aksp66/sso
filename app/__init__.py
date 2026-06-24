@@ -40,4 +40,7 @@ def create_app(config_name: str | None = None) -> Flask:
     from .routes.health import health_bp
     app.register_blueprint(health_bp)
 
+    from .routes.auth import auth_bp
+    app.register_blueprint(auth_bp)
+
     return app

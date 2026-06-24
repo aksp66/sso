@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Mon profil — SSO{% endblock %}
+
+{% block extra_head %}
+<style>
+  .profile-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 24px;
+    animation: fadeUp 0.45s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(20px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .profile-header {
+    display:flex; align-items:center; gap:20px;
+    margin-bottom:32px;
+  }
+  .avatar {
+    width:72px; height:72px; border-radius:20px;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Outfit',sans-serif; font-size:28px; font-weight:700; color:#fff;
+    box-shadow:0 8px 28px rgba(29,78,216,0.4);
+    flex-shrink:0;
+  }
+  .profile-name {
+    font-family:'Outfit',sans-serif;
+    font-size:24px; font-weight:800;
+    letter-spacing:-0.02em;
+  }
+  .profile-email {
+    font-size:13px; color:var(--text-muted); margin-top:3px;
+  }
+  .info-grid {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:12px; margin-bottom:20px;
+  }
+  @media (max-width:520px) { .info-grid { grid-template-columns:1fr; } }
+  .info-tile {
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--glass-border);
+    border-radius:12px;
+    padding:16px 18px;
+    transition:border-color 0.2s;
+  }
+  .info-tile:hover { border-color:var(--glass-border-hover); }
+  .info-tile .tile-label {
+    font-family:'Outfit',sans-serif;
+    font-size:11px; font-weight:600;
+    letter-spacing:0.08em;
+    color:var(--text-muted);
+    text-transform:uppercase;
+    margin-bottom:6px;
+  }
+  .info-tile .tile-value {
+    font-size:14px; font-weight:600; color:var(--text-primary);
+  }
+  .section-title {
+    font-family:'Outfit',sans-serif;
+    font-size:13px; font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    margin-bottom:12px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-title::after {
+    content:''; flex:1; height:1px;
+    background:linear-gradient(90deg,var(--glass-border),transparent);
+  }
+  .action-row {
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .btn-green {
+    display:inline-flex; align-items:center; gap:7px;
+    background:linear-gradient(135deg,#15803D,#166534);
+    color:#fff;
+    font-family:'Outfit',sans-serif; font-weight:600; font-size:13px;
+    padding:10px 18px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.1);
+    cursor:pointer; transition:all 0.2s;
+    box-shadow:0 4px 14px rgba(21,128,61,0.3);
+    text-decoration:none;
+  }
+  .btn-green:hover {
+    background:linear-gradient(135deg,#16A34A,#15803D);
+    transform:translateY(-1px);
+  }
+  .totp-row {
+    display:flex; align-items:center; gap:12px;
+  }
+  .totp-indicator {
+    width:10px; height:10px; border-radius:50%;
+    flex-shrink:0;
+  }
+  .totp-on  { background:#4ADE80; box-shadow:0 0 8px rgba(74,222,128,0.6); }
+  .totp-off { background:#64748B; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="profile-wrap">
+
+  <!-- En-tête profil -->
+  <div class="glass" style="padding:32px 30px; margin-bottom:16px;">
+    <div class="profile-header">
+      <div class="avatar">{{ user.username[0].upper() }}</div>
+      <div>
+        <div class="profile-name">{{ user.username }}</div>
+        <div class="profile-email">{{ user.email }}</div>
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+          {% if user.is_admin %}
+            <span class="badge badge-blue"><i class="fas fa-crown"></i> Administrateur</span>
+          {% endif %}
+          {% if user.is_active %}
+            <span class="badge badge-green"><i class="fas fa-circle" style="font-size:7px;"></i> Actif</span>
+          {% else %}
+            <span class="badge badge-red"><i class="fas fa-ban"></i> Inactif</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Infos -->
+    <p class="section-title"><i class="fas fa-id-card"></i> Informations du compte</p>
+    <div class="info-grid">
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-user" style="margin-right:4px;"></i> Nom d'utilisateur</div>
+        <div class="tile-value">{{ user.username }}</div>
+      </div>
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-envelope" style="margin-right:4px;"></i> E-mail</div>
+        <div class="tile-value" style="font-size:13px;">{{ user.email }}</div>
+      </div>
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-calendar" style="margin-right:4px;"></i> Membre depuis</div>
+        <div class="tile-value">{{ user.created_at.strftime('%d %b %Y') }}</div>
+      </div>
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-shield-halved" style="margin-right:4px;"></i> Double authentification</div>
+        <div class="tile-value">
+          <div class="totp-row">
+            <span class="totp-indicator {{ 'totp-on' if user.totp_enabled else 'totp-off' }}"></span>
+            {% if user.totp_enabled %}
+              <span style="color:#4ADE80;">Activée</span>
+            {% else %}
+              <span style="color:var(--text-muted);">Désactivée</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sécurité -->
+  <div class="glass" style="padding:28px 30px; margin-bottom:16px;">
+    <p class="section-title"><i class="fas fa-shield-halved"></i> Sécurité</p>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div style="font-weight:600; font-size:14px; margin-bottom:4px;">Authentification à deux facteurs (2FA)</div>
+        <div style="font-size:13px; color:var(--text-muted);">
+          {% if user.totp_enabled %}
+            Votre compte est protégé par une authentification TOTP.
+          {% else %}
+            Renforcez votre compte en activant la 2FA dès maintenant.
+          {% endif %}
+        </div>
+      </div>
+      {% if not user.totp_enabled %}
+        <a href="{{ url_for('twofa.setup') }}" class="btn-primary" style="width:auto; padding:10px 18px;">
+          <i class="fas fa-plus-circle"></i> Activer la 2FA
+        </a>
+      {% else %}
+        <span class="badge badge-green" style="font-size:12px; padding:6px 12px;">
+          <i class="fas fa-check-circle"></i> Protégé
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="glass" style="padding:24px 30px;">
+    <div class="action-row">
+      {% if user.is_admin %}
+        <a href="{{ url_for('admin.users') }}" class="btn-primary" style="width:auto; padding:10px 18px;">
+          <i class="fas fa-gear"></i> Panneau d'administration
+        </a>
+      {% endif %}
+      <a href="{{ url_for('auth.logout') }}" class="btn-danger">
+        <i class="fas fa-right-from-bracket"></i> Se déconnecter
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
