@@ -1,10 +1,28 @@
 import base64
 import os
+import secrets
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 
 load_dotenv()
+
+
+def _get_aes_key() -> bytes:
+    """Retourne la clé AES-256 (32 octets) depuis AES_ENCRYPTION_KEY.
+    Production : lève RuntimeError si absente.
+    Dev/test : génère une clé aléatoire par démarrage (pas de clé connue en dur).
+    """
+    raw = os.environ.get("AES_ENCRYPTION_KEY", "")
+    if raw:
+        return base64.b64decode(raw)
+    if os.environ.get("FLASK_ENV") == "production":
+        raise RuntimeError(
+            "AES_ENCRYPTION_KEY doit être définie en production. "
+            "Générez-la avec : python -c \""
+            "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+        )
+    return secrets.token_bytes(32)
 
 
 class Config:
@@ -39,9 +57,7 @@ class Config:
     WTF_CSRF_TIME_LIMIT: int = 3600  # secondes
 
     # ── Chiffrement AES-256-GCM ───────────────────────────────────────────
-    AES_ENCRYPTION_KEY: bytes = base64.b64decode(
-        os.environ.get("AES_ENCRYPTION_KEY", "")
-    ) if os.environ.get("AES_ENCRYPTION_KEY") else b"dev-aes-256-key-do-not-use-prod!"
+    AES_ENCRYPTION_KEY: bytes = _get_aes_key()
 
     # ── SSO / OAuth2 ──────────────────────────────────────────────────────
     SSO_ISSUER: str = os.environ.get("SSO_ISSUER", "http://localhost:8000")
