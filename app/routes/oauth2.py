@@ -357,14 +357,17 @@ def userinfo():
     user = User.query.get(uuid.UUID(payload['sub']))
     if not user:
         return jsonify({'error': 'invalid_token'}), 401
-    return jsonify({
-        'sub': str(user.id),
-        'email': user.email,
-        'email_verified': True,
-        'name': user.username,
-        'preferred_username': user.username,
-        'updated_at': int(user.updated_at.timestamp()) if user.updated_at else 0
-    })
+    # OIDC Core §5.4 : retourner uniquement les claims correspondant aux scopes accordés
+    scope_set = set(payload.get('scope', '').split())
+    claims = {'sub': str(user.id)}
+    if 'email' in scope_set:
+        claims['email'] = user.email
+        claims['email_verified'] = True
+    if 'profile' in scope_set:
+        claims['name'] = user.username
+        claims['preferred_username'] = user.username
+        claims['updated_at'] = int(user.updated_at.timestamp()) if user.updated_at else 0
+    return jsonify(claims)
 
 # ----------------------------------------------------------------------
 # /revoke
