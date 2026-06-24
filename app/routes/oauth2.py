@@ -2,6 +2,7 @@ import os
 import hashlib
 import base64
 import uuid
+from urllib.parse import urlencode
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, redirect, render_template, session, current_app, jsonify
 from werkzeug.exceptions import BadRequest
@@ -171,17 +172,18 @@ def authorize():
         redirect_uri=redirect_uri,
         scope=scope,
         nonce=nonce,
+        state=state,
         code_challenge=code_challenge,
         code_challenge_method=code_challenge_method,
         expires_at=expires_at
     )
     db.session.add(auth_code)
     db.session.commit()
-    # Redirection vers le client avec le code (et le state reçu directement)
-    redirect_params = f"code={code}"
-    if state:
-        redirect_params += f"&state={state}"
-    return redirect(f"{redirect_uri}?{redirect_params}")
+    # Redirection — state repris depuis l'enregistrement (pas directement depuis la requête)
+    params = {'code': code}
+    if auth_code.state:
+        params['state'] = auth_code.state
+    return redirect(f"{redirect_uri}?{urlencode(params)}")
 
 # ----------------------------------------------------------------------
 # /token

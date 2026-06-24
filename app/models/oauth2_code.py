@@ -71,6 +71,8 @@ class OAuth2AuthorizationCode(db.Model):
     scope: Mapped[str] = mapped_column(Text, nullable=False)
     # Nonce OpenID Connect (protection replay attack sur id_token)
     nonce: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # State OAuth2 (RFC 6749 §10.12 — echoed back in redirect for client CSRF protection)
+    state: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     # ── PKCE (RFC 7636) ────────────────────────────────────────────────────
     code_challenge: Mapped[Optional[str]] = mapped_column(
