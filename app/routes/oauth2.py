@@ -13,6 +13,7 @@ from app.models.oauth2_client import OAuth2Client
 from app.models.oauth2_code import OAuth2AuthorizationCode
 from app.models.oauth2_token import OAuth2Token
 from app.models.rs256_key import RS256Key
+from app.models.oauth2_consent import OAuth2Consent
 from app.services.key_service import KeyService
 from app.services.session_service import create_user_session
 import jwt
@@ -159,11 +160,31 @@ def authorize():
             else:
                 return render_template('login.html', error='Email ou mot de passe incorrect', **request.args)
         return render_template('login.html', **request.args)
-    # Utilisateur déjà connecté : auto-consentement, génération du code
+    # Utilisateur déjà connecté
     user = User.query.get(uuid.UUID(user_id))
     if not user:
         session.clear()
         return redirect(request.url)
+    # Enregistrer / mettre à jour le consentement (GDPR Article 7)
+    requested_scopes = list(set(scope.split()))
+    consent = OAuth2Consent.query.filter_by(
+        user_id=user.id, client_id=client.client_id
+    ).first()
+    if consent and consent.is_active():
+        existing = set(consent.scopes or [])
+        new_scopes = set(requested_scopes)
+        if not new_scopes.issubset(existing):
+            consent.scopes = list(existing | new_scopes)
+            consent.granted_at = datetime.now(timezone.utc)
+            db.session.flush()
+    else:
+        consent = OAuth2Consent(
+            user_id=user.id,
+            client_id=client.client_id,
+            scopes=requested_scopes,
+        )
+        db.session.add(consent)
+        db.session.flush()
     # Générer le code d'autorisation
     code = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('=')
     expires_in = current_app.config.get('AUTHORIZATION_CODE_EXPIRE_SECONDS', 300)

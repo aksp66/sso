@@ -30,6 +30,7 @@ def create_app(config_name: str | None = None) -> Flask:
         from .models.audit_log import AuditLog
         from .models.oauth2_client import OAuth2Client
         from .models.oauth2_code import OAuth2AuthorizationCode
+        from .models.oauth2_consent import OAuth2Consent
         from .models.oauth2_token import OAuth2Token
         from .models.rs256_key import RS256Key
         from .models.user import User
