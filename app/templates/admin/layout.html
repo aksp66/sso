@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin — {{ title | default('SSO') }}{% endblock %}
+{% block title %}Admin — {{ title | default('Nexus') }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -224,9 +224,9 @@
   <!-- ── Sidebar ── -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+      <div class="logo-icon"><img src="{{ url_for('static', filename='img/nexus-logo-white.svg') }}" alt="Nexus" style="width:20px; height:20px;" /></div>
       <div>
-        <div class="logo-text">SSO Admin</div>
+        <div class="logo-text">Nexus</div>
         <div class="logo-sub">PANNEAU DE CONTRÔLE</div>
       </div>
     </div>

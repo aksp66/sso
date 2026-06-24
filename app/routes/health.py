@@ -101,7 +101,7 @@ def index():
     """Redirection vers /health pour la racine."""
     return jsonify(
         {
-            "service": "SSO OAuth2 / OpenID Connect",
+            "service": "Nexus",
             "version": "1.0.0",
             "status": "running",
             "docs": "/.well-known/openid-configuration",
