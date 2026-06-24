@@ -56,6 +56,9 @@ def create_app(config_name: str | None = None) -> Flask:
     from .routes.oauth2 import oauth2_bp
     app.register_blueprint(oauth2_bp)
 
+    from .routes.twofa import twofa_bp
+    app.register_blueprint(twofa_bp)
+
     # ── Scheduler (rotation des clés RS256) ───────────────────────────────
     if not app.config.get("TESTING") and not scheduler.running:
         _register_scheduled_tasks(app)

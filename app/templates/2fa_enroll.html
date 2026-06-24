@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Activer la 2FA — SSO{% endblock %}
+
+{% block extra_head %}
+<style>
+  .auth-center {
+    display: flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:24px;
+  }
+  .auth-card { width:100%; max-width:460px; animation: fadeUp 0.5s ease both; }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(24px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .step-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'Outfit',sans-serif; font-size:11px;
+    font-weight:700; letter-spacing:0.1em;
+    color: var(--accent);
+    background:rgba(56,189,248,0.1);
+    border:1px solid rgba(56,189,248,0.2);
+    padding:4px 12px; border-radius:100px; margin-bottom:14px;
+  }
+  .qr-frame {
+    display:flex; align-items:center; justify-content:center;
+    margin:24px auto;
+    width:180px; height:180px;
+    border-radius:16px;
+    background:white;
+    padding:12px;
+    box-shadow: 0 0 0 1px var(--glass-border), 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .qr-frame img { width:100%; height:100%; display:block; border-radius:4px; }
+  .secret-box {
+    display:flex; align-items:center; gap:10px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--glass-border);
+    border-radius:10px;
+    padding:10px 14px;
+    margin:16px 0;
+  }
+  .secret-box code {
+    flex:1; font-size:13px;
+    background:none; border:none; padding:0;
+    color:var(--accent);
+  }
+  .copy-btn {
+    background:none; border:none; cursor:pointer;
+    color:var(--text-muted); font-size:13px;
+    padding:4px 8px; border-radius:6px;
+    transition:all 0.2s;
+  }
+  .copy-btn:hover { background:rgba(255,255,255,0.08); color:var(--text-primary); }
+  .steps {
+    list-style:none; counter-reset:steps;
+    margin-bottom:22px;
+  }
+  .steps li {
+    counter-increment:steps;
+    display:flex; align-items:flex-start; gap:12px;
+    font-size:13px; color:var(--text-secondary);
+    margin-bottom:10px;
+  }
+  .steps li::before {
+    content:counter(steps);
+    flex-shrink:0;
+    width:22px; height:22px;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    border-radius:50%; font-size:11px; font-weight:700;
+    font-family:'Outfit',sans-serif;
+    color:#fff;
+    display:flex; align-items:center; justify-content:center;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-center">
+  <div class="auth-card">
+    <div class="glass" style="padding:40px 36px;">
+
+      <!-- En-tête -->
+      <div style="margin-bottom:28px;">
+        <span class="step-badge"><i class="fas fa-qrcode"></i> CONFIGURATION 2FA</span>
+        <h2 style="font-size:22px; font-weight:800; letter-spacing:-0.02em; margin-bottom:6px;">
+          Activer la double authentification
+        </h2>
+        <p style="font-size:13px; color:var(--text-muted);">
+          Renforcez la sécurité de votre compte avec une authentification TOTP.
+        </p>
+      </div>
+
+      <!-- Instructions -->
+      <ol class="steps">
+        <li>Installez Google Authenticator, Aegis ou Bitwarden sur votre téléphone.</li>
+        <li>Scannez le QR code ci-dessous ou saisissez la clé manuellement.</li>
+        <li>Entrez le code à 6 chiffres généré pour confirmer.</li>
+      </ol>
+
+      <!-- QR Code -->
+      <div class="qr-frame">
+        <img src="{{ qr_data_uri }}" alt="QR Code TOTP" />
+      </div>
+
+      <!-- Clé manuelle -->
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">
+        <i class="fas fa-keyboard" style="margin-right:5px;"></i>
+        Clé manuelle (si vous ne pouvez pas scanner) :
+      </p>
+      <div class="secret-box">
+        <code id="secret-key">{{ secret }}</code>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('{{ secret }}'); this.innerHTML='<i class=\'fas fa-check\'></i>'">
+          <i class="fas fa-copy"></i>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Formulaire de vérification -->
+      <form method="POST" action="{{ url_for('twofa.enroll') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div style="margin-bottom:20px;">
+          <label class="label">
+            <i class="fas fa-mobile-alt" style="margin-right:5px; color:var(--blue-400);"></i>
+            Code à 6 chiffres
+          </label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-hashtag input-icon"></i>
+            <input
+              type="text"
+              name="code"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              inputmode="numeric"
+              placeholder="000 000"
+              required
+              class="input-field"
+              style="text-align:center; letter-spacing:0.3em; font-size:18px; font-family:'JetBrains Mono',monospace;"
+            />
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-shield-check"></i>
+          Vérifier et activer
+        </button>
+      </form>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

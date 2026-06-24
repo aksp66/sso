@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Vérification 2FA — SSO{% endblock %}
+
+{% block extra_head %}
+<style>
+  .auth-center {
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:24px;
+  }
+  .auth-card { width:100%; max-width:420px; animation: fadeUp 0.5s ease both; }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(24px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .icon-ring {
+    width:60px; height:60px;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    border-radius:16px; margin:0 auto 20px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; color:#fff;
+    box-shadow:0 8px 24px rgba(29,78,216,0.4);
+  }
+  .tab-switch {
+    display:flex; gap:6px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--glass-border);
+    border-radius:10px; padding:4px;
+    margin-bottom:22px;
+  }
+  .tab-btn {
+    flex:1; padding:9px;
+    border-radius:8px; border:none;
+    font-family:'Outfit',sans-serif; font-size:13px; font-weight:600;
+    cursor:pointer; transition:all 0.2s;
+    color:var(--text-muted); background:transparent;
+  }
+  .tab-btn.active {
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    color:#fff;
+    box-shadow:0 4px 12px rgba(29,78,216,0.3);
+  }
+  .otp-inputs {
+    display:flex; gap:8px; justify-content:center;
+    margin:10px 0;
+  }
+  .otp-digit {
+    width:46px; height:54px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--glass-border);
+    border-radius:10px;
+    text-align:center; font-size:22px;
+    font-family:'JetBrains Mono',monospace;
+    color:var(--text-primary);
+    outline:none;
+    transition:all 0.2s;
+    caret-color: var(--accent);
+  }
+  .otp-digit:focus {
+    border-color:var(--blue-500);
+    background:rgba(59,130,246,0.08);
+    box-shadow:0 0 0 3px rgba(59,130,246,0.15);
+  }
+  .backup-hint {
+    font-size:12px; color:var(--text-muted); margin-top:8px;
+    display:flex; align-items:center; gap:6px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-center">
+  <div class="auth-card">
+    <div class="glass" style="padding:40px 36px;" x-data="{ tab: 'totp' }">
+
+      <!-- En-tête -->
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="icon-ring">
+          <i class="fas fa-mobile-screen-button"></i>
+        </div>
+        <h2 style="font-size:22px; font-weight:800; letter-spacing:-0.02em; margin-bottom:6px;">
+          Vérification en deux étapes
+        </h2>
+        <p style="font-size:13px; color:var(--text-muted);">
+          Entrez le code généré par votre application ou utilisez un code de secours.
+        </p>
+      </div>
+
+      <!-- Onglets -->
+      <div class="tab-switch">
+        <button class="tab-btn" :class="{ active: tab === 'totp' }" @click="tab='totp'" type="button">
+          <i class="fas fa-mobile-alt" style="margin-right:5px;"></i> Code TOTP
+        </button>
+        <button class="tab-btn" :class="{ active: tab === 'backup' }" @click="tab='backup'" type="button">
+          <i class="fas fa-key" style="margin-right:5px;"></i> Code de secours
+        </button>
+      </div>
+
+      <form method="POST" action="{{ url_for('twofa.verify') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        <!-- Onglet TOTP -->
+        <div x-show="tab === 'totp'" x-transition>
+          <label class="label" style="text-align:center; display:block; margin-bottom:14px;">
+            Code à 6 chiffres
+          </label>
+          <div class="otp-inputs" id="otp-wrap">
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+          </div>
+          <!-- Champ caché agrégeant les chiffres -->
+          <input type="hidden" name="totp_code" id="totp-hidden" />
+          <p class="backup-hint" style="justify-content:center;">
+            <i class="fas fa-rotate" style="color:var(--blue-400);"></i>
+            Le code se renouvelle toutes les 30 secondes
+          </p>
+        </div>
+
+        <!-- Onglet code de secours -->
+        <div x-show="tab === 'backup'" x-transition>
+          <label class="label">Code de secours</label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-key input-icon"></i>
+            <input
+              type="text"
+              name="backup_code"
+              placeholder="xxxx-xxxx-xxxx"
+              class="input-field"
+              style="font-family:'JetBrains Mono',monospace; letter-spacing:0.08em;"
+            />
+          </div>
+          <p class="backup-hint">
+            <i class="fas fa-info-circle" style="color:var(--blue-400);"></i>
+            Chaque code de secours est à usage unique.
+          </p>
+        </div>
+
+        <div style="margin-top:24px;">
+          <button type="submit" class="btn-primary">
+            <i class="fas fa-check-circle"></i>
+            Valider
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Navigation automatique entre les champs OTP
+  const otpInputs = document.querySelectorAll('.otp-digit');
+  const hidden    = document.getElementById('totp-hidden');
+
+  function syncHidden() {
+    hidden.value = Array.from(otpInputs).map(i => i.value).join('');
+  }
+
+  otpInputs.forEach((input, idx) => {
+    input.addEventListener('input', e => {
+      const v = e.target.value.replace(/\D/g, '');
+      e.target.value = v;
+      syncHidden();
+      if (v && idx < otpInputs.length - 1) otpInputs[idx + 1].focus();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+        otpInputs[idx - 1].focus();
+      }
+    });
+    // Coller un code d'un coup
+    input.addEventListener('paste', e => {
+      e.preventDefault();
+      const paste = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      paste.split('').forEach((char, i) => {
+        if (otpInputs[i]) otpInputs[i].value = char;
+      });
+      syncHidden();
+      const next = otpInputs[Math.min(paste.length, 5)];
+      if (next) next.focus();
+    });
+  });
+</script>
+{% endblock %}
