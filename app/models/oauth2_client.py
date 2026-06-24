@@ -9,6 +9,7 @@ Représente une application cliente enregistrée auprès du SSO
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
+from urllib.parse import urlparse, urlunparse
 
 from sqlalchemy import Boolean, DateTime, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
@@ -108,9 +109,20 @@ class OAuth2Client(db.Model):
         foreign_keys="OAuth2AuthorizationCode.client_id",
     )
 
+    @staticmethod
+    def _normalize_uri(uri: str) -> str:
+        """Normalise une URI pour comparaison : minuscules scheme/host, pas de fragment.
+        Supprime le trailing slash sur le chemin racine uniquement (/ → vide)."""
+        p = urlparse(uri.strip())
+        path = p.path if p.path != '/' else ''
+        return urlunparse((p.scheme.lower(), p.netloc.lower(), path, p.params, p.query, ''))
+
     def has_redirect_uri(self, uri: str) -> bool:
-        """Valide qu'une redirect_uri est exactement dans la liste blanche."""
-        return uri in (self.redirect_uris or [])
+        """Valide qu'une redirect_uri est dans la liste blanche (après normalisation)."""
+        if not uri:
+            return False
+        norm = self._normalize_uri(uri)
+        return any(self._normalize_uri(r) == norm for r in (self.redirect_uris or []))
 
     def has_scope(self, scope: str) -> bool:
         """Vérifie que tous les scopes demandés sont autorisés pour ce client."""
