@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.extensions import bcrypt, db, limiter, get_redis
 from app.models.user import User
@@ -5,6 +6,9 @@ from app.services.session_service import create_user_session
 import uuid
 
 auth_bp = Blueprint('auth', __name__)
+
+_LOCKOUT_THRESHOLD = 10
+_LOCKOUT_DURATION_MINUTES = 15
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")
@@ -20,6 +24,10 @@ def login():
             return render_template('login.html')
 
         if user and bcrypt.check_password_hash(user.password_hash, password):
+            # Réinitialiser le compteur d'échecs
+            user.failed_login_count = 0
+            user.locked_until = None
+            db.session.commit()
             # Si 2FA activée, rediriger vers la page de vérification
             if user.totp_enabled:
                 session['pending_2fa_user'] = str(user.id)
@@ -28,7 +36,11 @@ def login():
             session['user_id'] = str(user.id)
             return redirect(url_for('auth.finalize_login'))
         else:
-            # TODO: Gérer les échecs et lockout (failed_login_count, locked_until)
+            if user:
+                user.failed_login_count += 1
+                if user.failed_login_count >= _LOCKOUT_THRESHOLD:
+                    user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_DURATION_MINUTES)
+                db.session.commit()
             flash('Email ou mot de passe incorrect', 'danger')
             return render_template('login.html')
     return render_template('login.html')
