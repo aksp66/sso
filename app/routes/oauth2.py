@@ -138,6 +138,9 @@ def authorize():
         return BadRequest('Requested scope not allowed')
     if code_challenge and code_challenge_method != 'S256':
         return BadRequest('Only S256 code_challenge_method is allowed')
+    # PKCE obligatoire pour les clients publics (RFC 7636 §4.1)
+    if not client.is_confidential and not code_challenge:
+        return BadRequest('PKCE required for public clients')
     # Session utilisateur
     user_id = session.get('user_id')
     if not user_id:
