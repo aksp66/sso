@@ -4,7 +4,7 @@ import base64
 import uuid
 from urllib.parse import urlencode
 from datetime import datetime, timedelta, timezone
-from flask import Blueprint, request, redirect, render_template, session, current_app, jsonify
+from flask import Blueprint, request, redirect, render_template, session, current_app, jsonify, abort
 from werkzeug.exceptions import BadRequest
 from cryptography.hazmat.primitives import serialization
 from app.extensions import db, bcrypt, limiter, get_redis, csrf
@@ -137,18 +137,18 @@ def authorize():
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method', '')
     if response_type != 'code':
-        return BadRequest('response_type must be code')
+        abort(400, description='response_type must be code')
     # Validation client
     client = OAuth2Client.query.filter_by(client_id=client_id, is_active=True).first()
     if not client or not client.has_redirect_uri(redirect_uri):
-        return BadRequest('Invalid client or redirect_uri')
+        abort(400, description='Invalid client or redirect_uri')
     if not client.has_scope(scope):
-        return BadRequest('Requested scope not allowed')
+        abort(400, description='Requested scope not allowed')
     if code_challenge and code_challenge_method != 'S256':
-        return BadRequest('Only S256 code_challenge_method is allowed')
+        abort(400, description='Only S256 code_challenge_method is allowed')
     # PKCE obligatoire pour les clients publics (RFC 7636 §4.1)
     if not client.is_confidential and not code_challenge:
-        return BadRequest('PKCE required for public clients')
+        abort(400, description='PKCE required for public clients')
     # Session utilisateur
     user_id = session.get('user_id')
     if not user_id:

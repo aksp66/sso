@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, jsonify, render_template, request
 from config import config
 from .extensions import (
     bcrypt,
@@ -84,6 +84,9 @@ def create_app(config_name: str | None = None) -> Flask:
     # ── En-têtes de sécurité HTTP ─────────────────────────────────────────
     _configure_security_headers(app)
 
+    # ── Pages d'erreur ─────────────────────────────────────────────────────
+    _configure_error_handlers(app)
+
     # ── Scheduler (rotation des clés RS256) ───────────────────────────────
     if not app.config.get("TESTING") and not scheduler.running:
         _register_scheduled_tasks(app)
@@ -107,6 +110,55 @@ def _configure_security_headers(app: Flask) -> None:
         response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
         response.headers.setdefault('Content-Security-Policy', _CSP)
         return response
+
+def _wants_json() -> bool:
+    """Les endpoints OAuth2 répondent toujours en JSON (RFC 6749 §5.2),
+    sauf /authorize qui est navigué par un navigateur et doit afficher
+    une page HTML lisible (RFC 6749 §4.1.2.1 — erreurs avant redirection)."""
+    if request.blueprint == 'oauth2' and request.endpoint != 'oauth2.authorize':
+        return True
+    best = request.accept_mimetypes.best_match(['application/json', 'text/html'])
+    return best == 'application/json'
+
+
+def _configure_error_handlers(app: Flask) -> None:
+    @app.errorhandler(400)
+    def handle_400(e):
+        if _wants_json():
+            return jsonify({'error': 'invalid_request', 'error_description': str(e.description)}), 400
+        return render_template('errors/400.html'), 400
+
+    @app.errorhandler(401)
+    def handle_401(e):
+        if _wants_json():
+            return jsonify({'error': 'invalid_token', 'error_description': str(e.description)}), 401
+        return render_template('errors/401.html'), 401
+
+    @app.errorhandler(403)
+    def handle_403(e):
+        if _wants_json():
+            return jsonify({'error': 'access_denied', 'error_description': str(e.description)}), 403
+        return render_template('errors/403.html'), 403
+
+    @app.errorhandler(404)
+    def handle_404(e):
+        if _wants_json():
+            return jsonify({'error': 'not_found'}), 404
+        return render_template('errors/404.html'), 404
+
+    @app.errorhandler(429)
+    def handle_429(e):
+        if _wants_json():
+            return jsonify({'error': 'rate_limit_exceeded', 'error_description': str(e.description)}), 429
+        return render_template('errors/429.html'), 429
+
+    @app.errorhandler(500)
+    def handle_500(e):
+        app.logger.error(f"Erreur serveur non gérée : {e}")
+        if _wants_json():
+            return jsonify({'error': 'server_error'}), 500
+        return render_template('errors/500.html'), 500
+
 
 def _register_scheduled_tasks(app: Flask) -> None:
     def rotate_rs256_keys() -> None:

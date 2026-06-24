@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Accès refusé — Nexus{% endblock %}
+
+{% block extra_head %}
+<style>
+  .error-center { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+  .error-card { width:100%; max-width:460px; text-align:center; animation: fadeUp 0.45s ease both; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .error-icon {
+    width:72px; height:72px; border-radius:20px; margin:0 auto 22px;
+    background:linear-gradient(135deg,#B91C1C,#7F1D1D);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 32px rgba(185,28,28,0.35); font-size:28px; color:#fff;
+  }
+  .error-code {
+    font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; letter-spacing:0.1em;
+    color:#F87171; margin-bottom:10px;
+  }
+  .error-title { font-size:24px; font-weight:800; letter-spacing:-0.02em; margin-bottom:10px; }
+  .error-message { font-size:14px; color:var(--text-muted); line-height:1.7; margin-bottom:28px; }
+  .error-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .error-actions a.btn-primary, .error-actions a.btn-outline { width:auto; padding:11px 22px; text-decoration:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-center">
+  <div class="error-card">
+    <div class="glass" style="padding:44px 36px;">
+      <div class="error-icon"><i class="fas fa-ban"></i></div>
+      <div class="error-code">ERREUR 403</div>
+      <h1 class="error-title">Accès refusé</h1>
+      <p class="error-message">
+        Vous n'avez pas les autorisations nécessaires pour accéder à cette page.
+      </p>
+      <div class="error-actions">
+        <a href="{{ url_for('auth.profile') }}" class="btn-primary"><i class="fas fa-user"></i> Mon profil</a>
+        <a href="{{ url_for('public.home') }}" class="btn-outline"><i class="fas fa-house"></i> Accueil</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
