@@ -226,6 +226,9 @@ def token():
         if auth_code.code_challenge:
             if not code_verifier:
                 return jsonify({'error': 'invalid_grant'}), 400
+            # RFC 7636 : 43 ≤ len(code_verifier) ≤ 128
+            if not (43 <= len(code_verifier) <= 128):
+                return jsonify({'error': 'invalid_grant'}), 400
             # Vérifier PKCE S256
             expected = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
             if expected != auth_code.code_challenge:
