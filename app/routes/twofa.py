@@ -1,6 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.extensions import db, csrf, limiter
 from app.models.user import User
+from app.models.audit_log import (
+    AuditLog,
+    EVENT_2FA_ENABLED,
+    EVENT_2FA_FAILURE,
+    EVENT_BACKUP_CODE_USED,
+)
 from app.services.totp_service import TOTPService
 import uuid
 import bcrypt
@@ -52,6 +58,12 @@ def enroll():
     backup_codes = TOTPService.generate_backup_codes()
     hashed_backup = TOTPService.hash_backup_codes(backup_codes)
     user.backup_codes = hashed_backup
+    AuditLog.log(
+        event_type=EVENT_2FA_ENABLED,
+        ip_address=request.remote_addr,
+        user_id=user.id,
+        user_agent=request.user_agent.string,
+    )
     db.session.commit()
     # Afficher les codes de secours une seule fois
     session['backup_codes'] = backup_codes
@@ -88,6 +100,14 @@ def verify():
             # Succès : finaliser la connexion
             return redirect(url_for('auth.finalize_login'))
         else:
+            AuditLog.log(
+                event_type=EVENT_2FA_FAILURE,
+                ip_address=request.remote_addr,
+                user_id=user.id,
+                user_agent=request.user_agent.string,
+                details={"method": "totp"},
+            )
+            db.session.commit()
             flash('Code TOTP invalide.', 'danger')
             return redirect(request.referrer or url_for('auth.login'))
     elif backup:
@@ -97,9 +117,24 @@ def verify():
             if bcrypt.check_password_hash(hashed, backup):
                 # Supprimer ce code de secours utilisé
                 del user.backup_codes[idx]
+                AuditLog.log(
+                    event_type=EVENT_BACKUP_CODE_USED,
+                    ip_address=request.remote_addr,
+                    user_id=user.id,
+                    user_agent=request.user_agent.string,
+                    details={"codes_remaining": len(user.backup_codes)},
+                )
                 db.session.commit()
                 # Finaliser connexion
                 return redirect(url_for('auth.finalize_login'))
+        AuditLog.log(
+            event_type=EVENT_2FA_FAILURE,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            user_agent=request.user_agent.string,
+            details={"method": "backup_code"},
+        )
+        db.session.commit()
         flash('Code de secours invalide.', 'danger')
         return redirect(request.referrer or url_for('auth.login'))
     flash('Veuillez fournir un code TOTP ou un code de secours.', 'danger')

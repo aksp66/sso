@@ -14,6 +14,13 @@ from app.models.oauth2_code import OAuth2AuthorizationCode
 from app.models.oauth2_token import OAuth2Token
 from app.models.rs256_key import RS256Key
 from app.models.oauth2_consent import OAuth2Consent
+from app.models.audit_log import (
+    AuditLog,
+    EVENT_TOKEN_ISSUED,
+    EVENT_TOKEN_REVOKED,
+    EVENT_TOKEN_REFRESH,
+    EVENT_CONSENT_GRANTED,
+)
 from app.services.key_service import KeyService
 from app.services.session_service import create_user_session
 import jwt
@@ -177,6 +184,14 @@ def authorize():
             consent.scopes = list(existing | new_scopes)
             consent.granted_at = datetime.now(timezone.utc)
             db.session.flush()
+            AuditLog.log(
+                event_type=EVENT_CONSENT_GRANTED,
+                ip_address=request.remote_addr,
+                user_id=user.id,
+                client_id=client.client_id,
+                user_agent=request.user_agent.string,
+                details={"scopes": list(new_scopes - existing), "action": "scope_expanded"},
+            )
     else:
         consent = OAuth2Consent(
             user_id=user.id,
@@ -185,6 +200,14 @@ def authorize():
         )
         db.session.add(consent)
         db.session.flush()
+        AuditLog.log(
+            event_type=EVENT_CONSENT_GRANTED,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            client_id=client.client_id,
+            user_agent=request.user_agent.string,
+            details={"scopes": requested_scopes, "action": "new_consent"},
+        )
     # Générer le code d'autorisation
     code = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('=')
     expires_in = current_app.config.get('AUTHORIZATION_CODE_EXPIRE_SECONDS', 300)
@@ -289,6 +312,14 @@ def token():
             expires_at=refresh_exp
         )
         db.session.add(refresh_token)
+        AuditLog.log(
+            event_type=EVENT_TOKEN_ISSUED,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            client_id=client.client_id,
+            user_agent=request.user_agent.string,
+            details={"grant_type": "authorization_code", "scope": auth_code.scope},
+        )
         db.session.commit()
         # id_token (OpenID)
         id_payload = {
@@ -350,6 +381,14 @@ def token():
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=current_app.config['REFRESH_TOKEN_EXPIRE_SECONDS'])
         )
         db.session.add(new_refresh)
+        AuditLog.log(
+            event_type=EVENT_TOKEN_REFRESH,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            client_id=client.client_id,
+            user_agent=request.user_agent.string,
+            details={"scope": found.scope},
+        )
         db.session.commit()
         return jsonify({
             'access_token': new_access_token,
@@ -424,6 +463,17 @@ def revoke():
                     now_ts = int(datetime.now(timezone.utc).timestamp())
                     ttl = max(payload.get('exp', now_ts) - now_ts, 1)
                     redis.setex(f'blacklist:{jti}', ttl, '1')
+                    sub = payload.get('sub')
+                    uid_for_log = uuid.UUID(sub) if sub else None
+                    AuditLog.log(
+                        event_type=EVENT_TOKEN_REVOKED,
+                        ip_address=request.remote_addr,
+                        user_id=uid_for_log,
+                        client_id=client_id,
+                        user_agent=request.user_agent.string,
+                        details={"token_type": "access_token", "jti": jti},
+                    )
+                    db.session.commit()
             except (jwt.DecodeError, KeyError):
                 pass
         else:  # refresh_token
@@ -433,6 +483,14 @@ def revoke():
             ).first()
             if rt and bcrypt.check_password_hash(rt.token_hash, token):
                 rt.revoked_at = datetime.now(timezone.utc)
+                AuditLog.log(
+                    event_type=EVENT_TOKEN_REVOKED,
+                    ip_address=request.remote_addr,
+                    user_id=rt.user_id,
+                    client_id=client.client_id,
+                    user_agent=request.user_agent.string,
+                    details={"token_type": "refresh_token"},
+                )
                 db.session.commit()
     return jsonify({}), 200
 

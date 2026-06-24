@@ -2,6 +2,13 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.extensions import bcrypt, db, limiter, get_redis
 from app.models.user import User
+from app.models.audit_log import (
+    AuditLog,
+    EVENT_LOGIN_SUCCESS,
+    EVENT_LOGIN_FAILURE,
+    EVENT_ACCOUNT_LOCKED,
+    EVENT_LOGOUT,
+)
 from app.services.session_service import create_user_session
 import uuid
 
@@ -40,7 +47,26 @@ def login():
                 user.failed_login_count += 1
                 if user.failed_login_count >= _LOCKOUT_THRESHOLD:
                     user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_DURATION_MINUTES)
-                db.session.commit()
+                    AuditLog.log(
+                        event_type=EVENT_ACCOUNT_LOCKED,
+                        ip_address=request.remote_addr,
+                        user_id=user.id,
+                        user_agent=request.user_agent.string,
+                        details={"failed_count": user.failed_login_count},
+                    )
+                AuditLog.log(
+                    event_type=EVENT_LOGIN_FAILURE,
+                    ip_address=request.remote_addr,
+                    user_id=user.id,
+                    user_agent=request.user_agent.string,
+                )
+            else:
+                AuditLog.log(
+                    event_type=EVENT_LOGIN_FAILURE,
+                    ip_address=request.remote_addr,
+                    user_agent=request.user_agent.string,
+                )
+            db.session.commit()
             flash('Email ou mot de passe incorrect', 'danger')
             return render_template('login.html')
     return render_template('login.html')
@@ -57,6 +83,14 @@ def finalize_login():
     session_id = create_user_session(user.id, request.remote_addr, request.user_agent.string)
     session['user_id'] = str(user.id)
     session['session_id'] = session_id
+    AuditLog.log(
+        event_type=EVENT_LOGIN_SUCCESS,
+        ip_address=request.remote_addr,
+        user_id=user.id,
+        user_agent=request.user_agent.string,
+        details={"2fa": user.totp_enabled},
+    )
+    db.session.commit()
     # Rediriger vers la page demandée ou /profile par défaut
     next_url = session.pop('next_url', url_for('auth.profile'))
     return redirect(next_url)
@@ -81,10 +115,24 @@ def profile():
 
 @auth_bp.route('/logout')
 def logout():
+    user_id_str = session.get('user_id')
     session_id = session.pop('session_id', None)
     if session_id:
         redis = get_redis()
         redis.delete(f'session:{session_id}')
+    user_id_for_log = None
+    if user_id_str:
+        try:
+            user_id_for_log = uuid.UUID(user_id_str)
+        except ValueError:
+            pass
+    AuditLog.log(
+        event_type=EVENT_LOGOUT,
+        ip_address=request.remote_addr,
+        user_id=user_id_for_log,
+        user_agent=request.user_agent.string,
+    )
+    db.session.commit()
     session.clear()
     flash('Vous êtes déconnecté.', 'info')
     return redirect(url_for('auth.login'))
