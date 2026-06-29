@@ -40,6 +40,21 @@ def create_app(config_name: str | None = None) -> Flask:
     csrf.init_app(app)
     limiter.init_app(app)
 
+    # ── Application des migrations ──────────────────────────────────────────
+    # Filet de sécurité indépendant de entrypoint.sh : certains hébergeurs
+    # (ex. Render avec une commande de démarrage personnalisée) contournent
+    # l'ENTRYPOINT du Dockerfile et lancent gunicorn directement, sans jamais
+    # exécuter "flask db upgrade". En l'appliquant ici, les migrations sont
+    # garanties à chaque démarrage de l'app, quel que soit le mécanisme de
+    # lancement du conteneur. Idempotent : sans effet si déjà à jour.
+    if not app.config.get('TESTING'):
+        with app.app_context():
+            from flask_migrate import upgrade as apply_migrations
+            try:
+                apply_migrations()
+            except Exception as e:
+                app.logger.error(f"Erreur application des migrations : {e}")
+
     # ── Import des modèles (OBLIGATOIRE pour SQLAlchemy) ───────────────────
     with app.app_context():
         from .models.audit_log import AuditLog

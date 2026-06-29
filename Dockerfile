@@ -23,4 +23,7 @@ EXPOSE 8000
 # assigne dynamiquement ce port ; en local (docker-compose), il est absent et
 # on retombe sur 8000. docker-compose.yml définit son propre `command:` qui
 # prévaut de toute façon sur ce CMD par défaut.
-CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 30 wsgi:app
+# --preload : charge create_app() UNE SEULE FOIS dans le master avant le fork
+# des workers — sans ça, chaque worker exécute create_app() indépendamment
+# (migrations en double, plusieurs planificateurs APScheduler redondants).
+CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --preload --timeout 30 wsgi:app
