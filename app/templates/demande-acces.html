@@ -28,13 +28,7 @@
 <div class="request-center">
   <div class="request-card">
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}{% for category, message in messages %}
-        <div class="alert alert-{{ category }}">
-          <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i> {{ message }}
-        </div>
-      {% endfor %}{% endif %}
-    {% endwith %}
+    <!-- Les messages flash sont affichés globalement par base.html -->
 
     <div class="glass" style="padding:40px 36px;">
       <div style="text-align:center; margin-bottom:28px;">

@@ -272,17 +272,7 @@
   <!-- ── Contenu principal ── -->
   <main class="admin-main">
 
-    <!-- Alertes flash -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'danger' else ('warning' if category == 'warning' else 'info')) }}" style="margin-bottom:20px;">
-            <i class="fas fa-{{ 'check-circle' if category == 'success' else ('exclamation-circle' if category == 'danger' else ('exclamation-triangle' if category == 'warning' else 'info-circle')) }}"></i>
-            {{ message }}
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+    <!-- Les messages flash sont affichés globalement par base.html -->
 
     {% block admin_content %}{% endblock %}
   </main>

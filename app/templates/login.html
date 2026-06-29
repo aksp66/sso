@@ -79,17 +79,7 @@
 <div class="login-center">
   <div class="login-card">
 
-    <!-- Alertes flash locales -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'danger' else 'info') }}">
-            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i>
-            {{ message }}
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+    <!-- Les messages flash sont affichés globalement par base.html -->
 
     <div class="glass" style="padding: 40px 36px;">
       <!-- En-tête -->

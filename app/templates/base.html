@@ -242,6 +242,13 @@
       from { opacity:0; transform: translateY(-8px); }
       to   { opacity:1; transform: translateY(0); }
     }
+    .flash-alert-hide {
+      animation: slideUpFade 0.35s ease forwards;
+    }
+    @keyframes slideUpFade {
+      from { opacity:1; transform: translateY(0); }
+      to   { opacity:0; transform: translateY(-8px); }
+    }
     .alert-success {
       background: rgba(34,197,94,0.12);
       border-color: rgba(34,197,94,0.25);
@@ -343,14 +350,27 @@
   <!-- Alertes flash globales -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div style="position:fixed; top:20px; right:20px; z-index:9999; min-width:300px; max-width:420px;">
+      <div id="flash-alerts" style="position:fixed; top:20px; right:20px; z-index:9999; min-width:300px; max-width:420px;">
         {% for category, message in messages %}
-          <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'danger' else ('warning' if category == 'warning' else 'info')) }}">
+          <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'danger' else ('warning' if category == 'warning' else 'info')) }} flash-alert">
             <i class="fas fa-{{ 'check-circle' if category == 'success' else ('exclamation-circle' if category == 'danger' else ('exclamation-triangle' if category == 'warning' else 'info-circle')) }}"></i>
             <span>{{ message }}</span>
           </div>
         {% endfor %}
       </div>
+      <script>
+        // Disparition automatique des messages flash après 5 secondes
+        (function () {
+          var container = document.getElementById('flash-alerts');
+          if (!container) return;
+          setTimeout(function () {
+            container.querySelectorAll('.flash-alert').forEach(function (el) {
+              el.classList.add('flash-alert-hide');
+            });
+            setTimeout(function () { container.remove(); }, 350);
+          }, 5000);
+        })();
+      </script>
     {% endif %}
   {% endwith %}
 
