@@ -149,7 +149,10 @@ class AuditLog(db.Model):
         """
         entry = cls(
             event_type=event_type,
-            ip_address=ip_address,
+            # ip_address est NOT NULL : derrière certains proxys/edges,
+            # request.remote_addr peut être vide — ne jamais laisser l'audit
+            # planter la fonctionnalité qu'il est censé tracer.
+            ip_address=ip_address or "0.0.0.0",
             user_id=user_id,
             client_id=client_id,
             user_agent=user_agent,

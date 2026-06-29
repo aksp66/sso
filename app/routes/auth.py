@@ -91,6 +91,19 @@ def login():
 
 _VERIFY_EMAIL_TTL = 86400  # 24 heures
 
+def _issue_verification_email(user: User) -> None:
+    """Génère un nouveau token de vérification et envoie l'e-mail de confirmation.
+    Utilisé à l'inscription et lors d'un renvoi manuel."""
+    token = secrets.token_urlsafe(32)
+    redis = get_redis()
+    redis.setex(f'email_verify:{token}', _VERIFY_EMAIL_TTL, str(user.id))
+    verify_link = url_for('auth.verify_email', token=token, _external=True)
+    try:
+        send_verification_email(user.email, user.username, verify_link)
+    except Exception as exc:
+        current_app.logger.error(f"Envoi email vérification échoué pour {user.email}: {exc}")
+
+
 @auth_bp.route('/register', methods=['GET', 'POST'])
 @limiter.limit("10 per hour")
 def register():
@@ -129,10 +142,6 @@ def register():
         db.session.add(user)
         db.session.flush()  # attribue user.id avant de l'utiliser
 
-        token = secrets.token_urlsafe(32)
-        redis = get_redis()
-        redis.setex(f'email_verify:{token}', _VERIFY_EMAIL_TTL, str(user.id))
-
         AuditLog.log(
             event_type=EVENT_ACCOUNT_REGISTERED,
             ip_address=request.remote_addr,
@@ -141,11 +150,7 @@ def register():
         )
         db.session.commit()
 
-        verify_link = url_for('auth.verify_email', token=token, _external=True)
-        try:
-            send_verification_email(user.email, user.username, verify_link)
-        except Exception as exc:
-            current_app.logger.error(f"Envoi email vérification échoué pour {email}: {exc}")
+        _issue_verification_email(user)
         flash(
             'Compte créé ! Vérifiez votre boîte e-mail pour confirmer votre adresse avant de vous connecter.',
             'success',
@@ -176,6 +181,24 @@ def verify_email(token: str):
     db.session.commit()
     flash('Adresse e-mail confirmée ! Vous pouvez maintenant vous connecter.', 'success')
     return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/resend-verification', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
+def resend_verification():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        user = User.query.filter_by(email=email).first()
+        if user and not user.email_verified:
+            _issue_verification_email(user)
+        # Message générique anti-énumération : identique que le compte existe,
+        # soit déjà vérifié, ou n'existe pas du tout.
+        flash(
+            'Si ce compte existe et n\'est pas encore confirmé, un nouvel e-mail vient d\'être envoyé.',
+            'info',
+        )
+        return redirect(url_for('auth.login'))
+    return render_template('resend_verification.html')
 
 
 @auth_bp.route('/finalize-login')
