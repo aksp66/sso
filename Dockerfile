@@ -18,6 +18,9 @@ RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
 
-# ENTRYPOINT exécute les migrations, CMD est la commande réelle
-ENTRYPOINT ["./entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "30", "wsgi:app"]
+# ENTRYPOINT exécute les migrations, CMD est la commande réelle.
+# Forme shell (pas exec) pour que ${PORT} soit interpolé par le shell — Render
+# assigne dynamiquement ce port ; en local (docker-compose), il est absent et
+# on retombe sur 8000. docker-compose.yml définit son propre `command:` qui
+# prévaut de toute façon sur ce CMD par défaut.
+CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 30 wsgi:app

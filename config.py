@@ -41,6 +41,18 @@ def _get_secret_key() -> str:
     return secrets.token_hex(32)
 
 
+def _get_database_url(default: str) -> str:
+    """Récupère DATABASE_URL et corrige le schéma si nécessaire.
+    Render (et d'autres hébergeurs) fournissent une URL au format
+    postgres://..., un alias historique que SQLAlchemy 1.4+/2.0 ne reconnaît
+    plus — il exige explicitement postgresql://.
+    """
+    url = os.environ.get("DATABASE_URL", default)
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     # ── Flask ─────────────────────────────────────────────────────────────
     SECRET_KEY: str = _get_secret_key()
@@ -48,8 +60,8 @@ class Config:
     TESTING: bool = False
 
     # ── Base de données ───────────────────────────────────────────────────
-    SQLALCHEMY_DATABASE_URI: str = os.environ.get(
-        "DATABASE_URL", "postgresql://sso_user:sso_pass@localhost:5432/sso_db"
+    SQLALCHEMY_DATABASE_URI: str = _get_database_url(
+        "postgresql://sso_user:sso_pass@localhost:5432/sso_db"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     SQLALCHEMY_ENGINE_OPTIONS: dict = {

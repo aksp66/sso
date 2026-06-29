@@ -426,7 +426,51 @@ REDIS_URL=redis://...
 docker compose up -d
 ```
 
-### Nginx (reverse proxy)
+### Render (hébergement gratuit)
+
+Render déploie directement le `Dockerfile` existant comme un service web qui reste actif en continu
+(contrairement à un hébergeur serverless comme Vercel, incompatible avec notre planificateur
+APScheduler). Sur Render, **aucun Nginx n'est nécessaire** : la plateforme gère elle-même le TLS et
+la terminaison HTTPS en façade — passez directement à la section suivante si vous déployez ailleurs
+(VPS) et avez besoin d'un reverse proxy.
+
+**1. Créer les services sur [render.com](https://render.com) :**
+
+| Étape | Type Render | Nom suggéré |
+|---|---|---|
+| 1 | New → PostgreSQL | `nexus-db` |
+| 2 | New → Key Value (Redis) | `nexus-redis` |
+| 3 | New → Web Service → connecter le dépôt GitHub, runtime **Docker** | `nexus-web` |
+
+**2. Variables d'environnement à définir sur le Web Service :**
+
+| Variable | Valeur |
+|---|---|
+| `FLASK_ENV` | `production` |
+| `SECRET_KEY` | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `AES_ENCRYPTION_KEY` | `python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"` |
+| `DATABASE_URL` | Internal Database URL fournie par `nexus-db` (onglet *Connect*) |
+| `REDIS_URL` | Internal connection string fournie par `nexus-redis` |
+| `SSO_ISSUER` | URL publique attribuée par Render, ex. `https://nexus-web.onrender.com` |
+| `BCRYPT_LOG_ROUNDS` | `12` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Identifiants de votre fournisseur SMTP |
+
+> `DATABASE_URL` peut être fournie par Render au format `postgres://...` — `config.py` corrige
+> automatiquement ce schéma en `postgresql://...`, requis par SQLAlchemy 2.0.
+
+**3. Limites du palier gratuit, en toute transparence :**
+
+- Le service web s'endort après une période d'inactivité et met quelques dizaines de secondes à se
+  réveiller à la requête suivante.
+- Pendant cette mise en veille, le planificateur APScheduler (rotation des clés RS256) ne tourne pas.
+  `KeyService.get_active_key()` régénère malgré tout une clé à la demande si l'active a expiré, donc
+  le service reste fonctionnel, mais sans rotation proactive pendant le sommeil. Pour une rotation
+  fiable indépendante du sommeil du service web, créer un *Cron Job* Render séparé qui appelle
+  périodiquement un endpoint déclenchant `KeyService.rotate_if_needed()`.
+- La base PostgreSQL gratuite est généralement limitée en durée ou en volume — vérifier les
+  conditions actuelles sur le tableau de bord au moment du déploiement.
+
+### Nginx (reverse proxy — déploiement VPS auto-hébergé)
 
 Exemple minimal de configuration :
 
