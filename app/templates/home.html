@@ -20,6 +20,12 @@
     background:linear-gradient(135deg,#1D4ED8,#0369A1); color:#fff !important;
     padding:9px 20px; border-radius:9px; font-weight:600;
   }
+  .nav-toggle {
+    display:none;
+    background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:9px;
+    width:40px; height:40px; align-items:center; justify-content:center;
+    color:var(--text-primary); font-size:17px; cursor:pointer;
+  }
 
   .hero {
     text-align:center; padding:80px 24px 60px; position:relative; z-index:1;
@@ -47,7 +53,23 @@
     display:grid; grid-template-columns:repeat(3,1fr); gap:20px;
     position:relative; z-index:1;
   }
-  @media (max-width:860px) { .features { grid-template-columns:1fr; } .hero h1 { font-size:34px; } .nav-links { display:none; } }
+  @media (max-width:860px) {
+    .features { grid-template-columns:1fr; }
+    .hero h1 { font-size:34px; }
+    .nav-toggle { display:flex; }
+    .nav-links {
+      display:none;
+      position:absolute; top:100%; left:0; right:0;
+      flex-direction:column; align-items:stretch; gap:0;
+      background:rgba(10,22,40,0.97);
+      backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+      border-bottom:1px solid var(--glass-border);
+      padding:8px 24px 20px;
+    }
+    .nav-links.open { display:flex; }
+    .nav-links a { padding:13px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+    .nav-links a.nav-cta { text-align:center; margin-top:10px; border-bottom:none; }
+  }
   .feature-card {
     padding:26px; transition:border-color 0.2s, transform 0.2s;
   }
@@ -90,7 +112,10 @@
     <img src="{{ url_for('static', filename='img/nexus-logo.svg') }}" alt="Nexus" />
     <span>Nexus</span>
   </a>
-  <div class="nav-links">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
+    <i class="fas fa-bars"></i>
+  </button>
+  <div class="nav-links" id="nav-links">
     <a href="{{ url_for('public.docs_developers', slug='demarrage-rapide') }}">Développeurs</a>
     <a href="{{ url_for('public.docs_aide', slug='creer-un-compte') }}">Aide</a>
     <a href="{{ url_for('public.docs_index') }}">Documentation</a>
@@ -99,6 +124,19 @@
     <a href="{{ url_for('auth.register') }}" class="nav-cta">Créer un compte</a>
   </div>
 </nav>
+
+<script>
+  (function () {
+    var toggle = document.getElementById('nav-toggle');
+    var links = document.getElementById('nav-links');
+    if (!toggle || !links) return;
+    toggle.addEventListener('click', function () {
+      var isOpen = links.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      toggle.innerHTML = isOpen ? '<i class="fas fa-xmark"></i>' : '<i class="fas fa-bars"></i>';
+    });
+  })();
+</script>
 
 <section class="hero">
   <span class="hero-badge"><i class="fas fa-bolt"></i> Lancé en juin 2026</span>

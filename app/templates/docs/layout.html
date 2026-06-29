@@ -45,7 +45,39 @@
   }
 
   .docs-main { flex:1; padding:40px 48px; max-width:860px; }
-  @media (max-width:900px) { .docs-main { padding:28px 24px; } }
+
+  /* ── Barre mobile + bascule du sidebar ── */
+  .docs-mobile-topbar {
+    display:none;
+    align-items:center; justify-content:space-between;
+    padding:14px 20px;
+    background:rgba(10,22,40,0.92);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--glass-border);
+    position:sticky; top:0; z-index:60;
+  }
+  .docs-mobile-topbar span { font-family:'Outfit',sans-serif; font-weight:800; font-size:15px; color:var(--text-primary); }
+  .docs-sidebar-toggle {
+    background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:9px;
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    color:var(--text-primary); font-size:16px; cursor:pointer;
+  }
+  .docs-sidebar-overlay {
+    display:none;
+    position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:90;
+  }
+  @media (max-width:900px) {
+    .docs-shell { flex-direction:column; }
+    .docs-mobile-topbar { display:flex; }
+    .docs-sidebar {
+      position:fixed; left:0; top:0; height:100vh; z-index:100;
+      transform:translateX(-100%);
+      transition:transform 0.25s ease;
+    }
+    .docs-sidebar.open { transform:translateX(0); }
+    .docs-sidebar-overlay.open { display:block; }
+    .docs-main { padding:24px 20px; }
+  }
 
   .docs-content h1 {
     font-size:28px; font-weight:800; letter-spacing:-0.02em; margin-bottom:8px;
@@ -104,7 +136,20 @@
 
 {% block content %}
 <div class="docs-shell">
-  <aside class="docs-sidebar">
+
+  <!-- ── Barre mobile (hamburger) ── -->
+  <div class="docs-mobile-topbar">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img src="{{ url_for('static', filename='img/nexus-logo.svg') }}" alt="Nexus" style="width:22px; height:22px;" />
+      <span>Nexus Docs</span>
+    </div>
+    <button type="button" class="docs-sidebar-toggle" id="docs-sidebar-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
+      <i class="fas fa-bars"></i>
+    </button>
+  </div>
+  <div class="docs-sidebar-overlay" id="docs-sidebar-overlay"></div>
+
+  <aside class="docs-sidebar" id="docs-sidebar">
     <a href="{{ url_for('public.home') }}" class="docs-logo">
       <img src="{{ url_for('static', filename='img/nexus-logo.svg') }}" alt="Nexus" />
       <span>Nexus Docs</span>
@@ -141,4 +186,24 @@
     </div>
   </main>
 </div>
+
+<script>
+  (function () {
+    var toggle = document.getElementById('docs-sidebar-toggle');
+    var sidebar = document.getElementById('docs-sidebar');
+    var overlay = document.getElementById('docs-sidebar-overlay');
+    if (!toggle || !sidebar || !overlay) return;
+    function closeSidebar() {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    toggle.addEventListener('click', function () {
+      var isOpen = sidebar.classList.toggle('open');
+      overlay.classList.toggle('open', isOpen);
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    overlay.addEventListener('click', closeSidebar);
+  })();
+</script>
 {% endblock %}

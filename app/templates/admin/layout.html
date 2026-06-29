@@ -107,6 +107,39 @@
     overflow-x:hidden;
   }
 
+  /* ── Barre mobile + bascule du sidebar ── */
+  .mobile-topbar {
+    display:none;
+    align-items:center; justify-content:space-between;
+    padding:14px 20px;
+    background:rgba(10,22,40,0.92);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--glass-border);
+    position:sticky; top:0; z-index:60;
+  }
+  .mobile-topbar .logo-text { font-family:'Outfit',sans-serif; font-weight:800; font-size:15px; }
+  .sidebar-toggle {
+    background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:9px;
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    color:var(--text-primary); font-size:16px; cursor:pointer;
+  }
+  .sidebar-overlay {
+    display:none;
+    position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:90;
+  }
+  @media (max-width:860px) {
+    .admin-shell { flex-direction:column; }
+    .mobile-topbar { display:flex; }
+    .sidebar {
+      position:fixed; left:0; top:0; height:100vh; z-index:100;
+      transform:translateX(-100%);
+      transition:transform 0.25s ease;
+    }
+    .sidebar.open { transform:translateX(0); }
+    .sidebar-overlay.open { display:block; }
+    .admin-main { padding:20px 16px; }
+  }
+
   /* ── Top bar ── */
   .topbar {
     display:flex; align-items:center; justify-content:space-between;
@@ -221,8 +254,20 @@
 {% block content %}
 <div class="admin-shell">
 
+  <!-- ── Barre mobile (hamburger) ── -->
+  <div class="mobile-topbar">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img src="{{ url_for('static', filename='img/nexus-logo-white.svg') }}" alt="Nexus" style="width:20px; height:20px;" />
+      <span class="logo-text">Nexus Admin</span>
+    </div>
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
+      <i class="fas fa-bars"></i>
+    </button>
+  </div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
   <!-- ── Sidebar ── -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="admin-sidebar">
     <div class="sidebar-logo">
       <div class="logo-icon"><img src="{{ url_for('static', filename='img/nexus-logo-white.svg') }}" alt="Nexus" style="width:20px; height:20px;" /></div>
       <div>
@@ -278,4 +323,24 @@
   </main>
 
 </div>
+
+<script>
+  (function () {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('admin-sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (!toggle || !sidebar || !overlay) return;
+    function closeSidebar() {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    toggle.addEventListener('click', function () {
+      var isOpen = sidebar.classList.toggle('open');
+      overlay.classList.toggle('open', isOpen);
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    overlay.addEventListener('click', closeSidebar);
+  })();
+</script>
 {% endblock %}
