@@ -151,12 +151,14 @@ def register():
         db.session.commit()
 
         _issue_verification_email(user)
-        flash(
-            'Compte créé ! Vérifiez votre boîte e-mail pour confirmer votre adresse avant de vous connecter.',
-            'success',
-        )
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.check_email', email=user.email))
     return render_template('register.html', form={})
+
+
+@auth_bp.route('/check-email')
+def check_email():
+    """Page intermédiaire affichée après l'inscription ou un renvoi d'e-mail."""
+    return render_template('check_email.html', email=request.args.get('email', ''))
 
 
 @auth_bp.route('/verify-email/<token>')
@@ -197,7 +199,7 @@ def resend_verification():
             'Si ce compte existe et n\'est pas encore confirmé, un nouvel e-mail vient d\'être envoyé.',
             'info',
         )
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.check_email', email=email))
     return render_template('resend_verification.html')
 
 

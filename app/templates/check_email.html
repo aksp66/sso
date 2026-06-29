@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Vérifiez votre e-mail — Nexus{% endblock %}
+
+{% block extra_head %}
+<style>
+  .center-wrap {
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:24px;
+  }
+  .card {
+    width:100%; max-width:440px;
+    animation: fadeUp 0.45s ease both;
+    text-align:center;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(20px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .pulse-ring {
+    width:72px; height:72px; border-radius:50%; margin:0 auto 20px;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 28px rgba(29,78,216,0.4);
+    font-size:28px; color:#fff;
+    position:relative;
+  }
+  .pulse-ring::after {
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border:2px solid rgba(56,189,248,0.4);
+    animation: pulse 2s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { transform:scale(0.9); opacity:0.8; }
+    100% { transform:scale(1.25); opacity:0; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="center-wrap">
+  <div class="card">
+    <!-- Les messages flash sont affichés globalement par base.html -->
+
+    <div class="glass" style="padding:44px 36px;">
+      <div class="pulse-ring"><i class="fas fa-paper-plane"></i></div>
+
+      <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:10px;">
+        Vérifiez votre boîte e-mail
+      </h1>
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:4px;">
+        Un lien de confirmation a été envoyé à
+      </p>
+      <p style="font-size:15px;font-weight:700;color:var(--blue-400);margin-bottom:24px;">
+        {{ email or 'votre adresse e-mail' }}
+      </p>
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:28px;">
+        Cliquez sur le lien reçu (valable 24 heures) pour activer votre compte.
+        Pensez à vérifier vos courriers indésirables si vous ne le voyez pas.
+      </p>
+
+      <form method="POST" action="{{ url_for('auth.resend_verification') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="email" value="{{ email }}" />
+        <button type="submit" class="btn-outline" style="width:100%;">
+          <i class="fas fa-rotate-right"></i> Renvoyer l'e-mail de confirmation
+        </button>
+      </form>
+
+      <div style="text-align:center; margin-top:20px; padding-top:16px; border-top:1px solid var(--glass-border);">
+        <a href="{{ url_for('auth.login') }}"
+           style="font-size:13px; color:var(--text-muted); text-decoration:none;">
+          <i class="fas fa-arrow-left" style="font-size:11px;"></i> Retour à la connexion
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
