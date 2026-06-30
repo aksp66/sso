@@ -18,6 +18,7 @@ from app.services.session_service import create_user_session
 from app.services.email_service import send_password_reset_email, send_verification_email
 import uuid
 import secrets
+import hashlib
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -185,22 +186,55 @@ def verify_email(token: str):
     return redirect(url_for('auth.login'))
 
 
+def _resend_cooldown_key(email: str) -> str:
+    return f"resend_cooldown:{hashlib.sha256(email.encode()).hexdigest()}"
+
+RESEND_COOLDOWN_SECONDS = 180  # 3 minutes
+
+
 @auth_bp.route('/resend-verification', methods=['GET', 'POST'])
-@limiter.limit("5 per hour")
+@limiter.limit("30 per hour")
 def resend_verification():
+    redis_client = get_redis()
+
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
+        if not email:
+            flash("Adresse e-mail requise.", "danger")
+            return render_template('resend_verification.html')
+
+        # Cooldown actif pour cet email → afficher le timer
+        ttl = redis_client.ttl(_resend_cooldown_key(email))
+        if ttl > 0:
+            return redirect(url_for('auth.resend_verification', email=email))
+
         user = User.query.filter_by(email=email).first()
-        if user and not user.email_verified:
-            _issue_verification_email(user)
-        # Message générique anti-énumération : identique que le compte existe,
-        # soit déjà vérifié, ou n'existe pas du tout.
-        flash(
-            'Si ce compte existe et n\'est pas encore confirmé, un nouvel e-mail vient d\'être envoyé.',
-            'info',
-        )
+
+        if not user:
+            flash("Aucun compte trouvé avec cette adresse. Créez un compte.", "info")
+            return redirect(url_for('auth.register'))
+
+        if user.email_verified:
+            flash("Votre adresse e-mail est déjà vérifiée. Vous pouvez vous connecter.", "info")
+            return redirect(url_for('auth.login'))
+
+        # Compte trouvé, non vérifié → envoi + pose du verrou 3 min
+        _issue_verification_email(user)
+        redis_client.setex(_resend_cooldown_key(email), RESEND_COOLDOWN_SECONDS, "1")
+        AuditLog.log(EVENT_EMAIL_VERIFIED, user.id, request.remote_addr or "0.0.0.0",
+                     "Renvoi e-mail de vérification")
         return redirect(url_for('auth.check_email', email=email))
-    return render_template('resend_verification.html')
+
+    # GET : si ?email= fourni, vérifier cooldown pour pré-afficher le timer
+    email_param = request.args.get('email', '').strip().lower()
+    cooldown_remaining = 0
+    if email_param:
+        ttl = redis_client.ttl(_resend_cooldown_key(email_param))
+        cooldown_remaining = max(ttl, 0)
+
+    return render_template('resend_verification.html',
+                           email=email_param,
+                           cooldown_remaining=cooldown_remaining)
 
 
 @auth_bp.route('/finalize-login')
