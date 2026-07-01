@@ -198,6 +198,36 @@ def send_client_credentials_email(
     _send(to_email, f"Accès Nexus approuvé — {client_name}", text_body, html_body)
 
 
+def send_email_change_email(to_email: str, username: str, confirm_link: str) -> None:
+    text_body = (
+        f"Bonjour {username},\n\n"
+        f"Vous avez demandé à changer votre adresse e-mail Nexus.\n"
+        f"Cliquez sur ce lien pour confirmer la nouvelle adresse (valable 1 heure) :\n{confirm_link}\n\n"
+        f"Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail."
+    )
+    inner = f"""
+      <p style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+                color:#3B82F6;margin:0 0 14px;">Changement d'adresse e-mail</p>
+      <h1 style="font-size:22px;font-weight:800;color:{_TEXT};margin:0 0 12px;
+                 letter-spacing:-0.02em;">Confirmez votre nouvelle adresse</h1>
+      <p style="font-size:14px;color:{_SECONDARY};line-height:1.75;margin:0 0 4px;">
+        Bonjour <strong style="color:{_TEXT};">{username}</strong>,<br>
+        Vous avez demandé à modifier l'adresse e-mail associée à votre compte Nexus.
+        Cliquez sur le bouton ci-dessous pour confirmer cette nouvelle adresse.
+      </p>
+      <p style="font-size:12px;color:{_MUTED};margin:0;">
+        Ce lien est valable <strong style="color:{_TEXT};">1 heure</strong>.
+      </p>
+      {_btn(confirm_link, "Confirmer la nouvelle adresse")}
+      <hr style="border:none;border-top:1px solid {_CARD_BORDER};margin:4px 0 20px;">
+      <p style="font-size:12px;color:{_MUTED};line-height:1.6;margin:0;">
+        Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.
+        Votre adresse actuelle reste inchangée.
+      </p>"""
+    html_body = _base_html("Confirmez votre nouvelle adresse e-mail — Nexus", inner)
+    _send(to_email, "Confirmez votre nouvelle adresse e-mail — Nexus", text_body, html_body)
+
+
 def send_client_request_rejected_email(
     to_email: str, client_name: str, reason: str | None
 ) -> None:

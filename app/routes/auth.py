@@ -15,7 +15,7 @@ from app.models.audit_log import (
     EVENT_EMAIL_VERIFIED,
 )
 from app.services.session_service import create_user_session
-from app.services.email_service import send_password_reset_email, send_verification_email
+from app.services.email_service import send_password_reset_email, send_verification_email, send_email_change_email
 import uuid
 import secrets
 import hashlib
@@ -388,6 +388,116 @@ def edit_profile():
             return redirect(url_for('auth.profile'))
 
     return render_template('edit_profile.html', user=user, errors=errors)
+
+
+@auth_bp.route('/profile/change-password', methods=['POST'])
+def change_password():
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    current_pw = request.form.get('current_password', '')
+    new_pw = request.form.get('new_password', '')
+    confirm_pw = request.form.get('confirm_password', '')
+    if not bcrypt.check_password_hash(user.password_hash, current_pw):
+        flash('Mot de passe actuel incorrect.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='security'))
+    if len(new_pw) < 8:
+        flash('Le nouveau mot de passe doit comporter au moins 8 caractères.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='security'))
+    if new_pw != confirm_pw:
+        flash('Les mots de passe ne correspondent pas.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='security'))
+    user.password_hash = bcrypt.generate_password_hash(new_pw).decode('utf-8')
+    AuditLog.log('password_changed', user.id, request.remote_addr or '0.0.0.0',
+                 'Changement de mot de passe depuis le profil')
+    db.session.commit()
+    flash('Mot de passe modifié avec succès.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='security'))
+
+
+@auth_bp.route('/profile/change-username', methods=['POST'])
+def change_username():
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    new_username = request.form.get('new_username', '').strip()
+    if len(new_username) < 3:
+        flash('Le nom d\'utilisateur doit comporter au moins 3 caractères.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    if '@' in new_username:
+        flash('Le nom d\'utilisateur ne peut pas être une adresse e-mail.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    if User.query.filter(User.username == new_username, User.id != user.id).first():
+        flash('Ce nom d\'utilisateur est déjà utilisé.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    user.username = new_username
+    db.session.commit()
+    flash('Nom d\'utilisateur modifié avec succès.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+
+
+_EMAIL_CHANGE_TTL = 3600  # 1 heure
+
+@auth_bp.route('/profile/change-email', methods=['POST'])
+def change_email():
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    new_email = request.form.get('new_email', '').strip().lower()
+    if not new_email or '@' not in new_email:
+        flash('Adresse e-mail invalide.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    if new_email == user.email:
+        flash('Cette adresse e-mail est déjà la vôtre.', 'info')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    if User.query.filter(User.email == new_email).first():
+        flash('Cette adresse e-mail est déjà utilisée par un autre compte.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+    token = secrets.token_urlsafe(32)
+    redis = get_redis()
+    redis.setex(f'email_change:{token}', _EMAIL_CHANGE_TTL, f"{str(user.id)}|{new_email}")
+    confirm_link = url_for('auth.confirm_email_change', token=token, _external=True)
+    try:
+        send_email_change_email(new_email, user.username, confirm_link)
+    except Exception as exc:
+        current_app.logger.error(f"Envoi email changement adresse échoué pour {new_email}: {exc}")
+    flash('Un lien de confirmation a été envoyé à votre nouvelle adresse e-mail (valable 1 h).', 'info')
+    return redirect(url_for('auth.edit_profile', _anchor='credentials'))
+
+
+@auth_bp.route('/profile/confirm-email-change/<token>')
+def confirm_email_change(token: str):
+    redis = get_redis()
+    data = redis.get(f'email_change:{token}')
+    if not data:
+        flash('Lien de confirmation invalide ou expiré.', 'danger')
+        return redirect(url_for('auth.profile'))
+    parts = data.split('|', 1)
+    if len(parts) != 2:
+        flash('Lien de confirmation invalide.', 'danger')
+        return redirect(url_for('auth.profile'))
+    user_id_str, new_email = parts
+    user = User.query.get(uuid.UUID(user_id_str))
+    if not user:
+        flash('Utilisateur introuvable.', 'danger')
+        return redirect(url_for('auth.login'))
+    if User.query.filter(User.email == new_email, User.id != user.id).first():
+        flash('Cette adresse e-mail est déjà utilisée par un autre compte.', 'danger')
+        return redirect(url_for('auth.profile'))
+    user.email = new_email
+    redis.delete(f'email_change:{token}')
+    db.session.commit()
+    flash('Adresse e-mail mise à jour avec succès.', 'success')
+    return redirect(url_for('auth.profile'))
 
 
 _RESET_TTL = 3600  # 1 heure
