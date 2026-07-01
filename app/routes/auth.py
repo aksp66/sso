@@ -117,6 +117,8 @@ def register():
         errors = []
         if len(username) < 3:
             errors.append('Le nom d\'utilisateur doit comporter au moins 3 caractères.')
+        if '@' in username:
+            errors.append('Le nom d\'utilisateur ne peut pas être une adresse e-mail.')
         if not email or '@' not in email:
             errors.append('Une adresse e-mail valide est requise.')
         if len(password) < 8:
