@@ -106,9 +106,18 @@
   <!-- En-tête profil -->
   <div class="glass" style="padding:32px 30px; margin-bottom:16px;">
     <div class="profile-header">
-      <div class="avatar">{{ user.username[0].upper() }}</div>
-      <div>
-        <div class="profile-name">{{ user.username }}</div>
+      {% if user.avatar %}
+        <img src="{{ user.avatar }}" alt="Avatar"
+             style="width:72px;height:72px;border-radius:20px;object-fit:cover;
+                    border:2px solid var(--glass-border);flex-shrink:0;" />
+      {% else %}
+        <div class="avatar">{{ user.username[0].upper() }}</div>
+      {% endif %}
+      <div style="flex:1;">
+        <div class="profile-name">{{ user.full_name or user.username }}</div>
+        {% if user.full_name %}
+          <div style="font-size:12px; color:var(--text-muted); margin-top:1px;">@{{ user.username }}</div>
+        {% endif %}
         <div class="profile-email">{{ user.email }}</div>
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
           {% if user.is_admin %}
@@ -121,9 +130,12 @@
           {% endif %}
         </div>
       </div>
+      <a href="{{ url_for('auth.edit_profile') }}" class="btn-outline" style="flex-shrink:0;">
+        <i class="fas fa-pen"></i> Modifier
+      </a>
     </div>
 
-    <!-- Infos -->
+    <!-- Infos compte -->
     <p class="section-title"><i class="fas fa-id-card"></i> Informations du compte</p>
     <div class="info-grid">
       <div class="info-tile">
@@ -152,6 +164,43 @@
         </div>
       </div>
     </div>
+
+    <!-- Infos profil étendu -->
+    {% if user.full_name or user.phone or user.birth_date or user.gender or user.address %}
+    <p class="section-title" style="margin-top:20px;"><i class="fas fa-address-card"></i> Informations personnelles</p>
+    <div class="info-grid">
+      {% if user.full_name %}
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-id-badge" style="margin-right:4px;"></i> Nom complet</div>
+        <div class="tile-value">{{ user.full_name }}</div>
+      </div>
+      {% endif %}
+      {% if user.phone %}
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-phone" style="margin-right:4px;"></i> Téléphone</div>
+        <div class="tile-value">{{ user.phone }}</div>
+      </div>
+      {% endif %}
+      {% if user.birth_date %}
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-cake-candles" style="margin-right:4px;"></i> Date de naissance</div>
+        <div class="tile-value">{{ user.birth_date.strftime('%d %b %Y') }}</div>
+      </div>
+      {% endif %}
+      {% if user.gender %}
+      <div class="info-tile">
+        <div class="tile-label"><i class="fas fa-venus-mars" style="margin-right:4px;"></i> Genre</div>
+        <div class="tile-value">{{ user.gender }}</div>
+      </div>
+      {% endif %}
+      {% if user.address %}
+      <div class="info-tile" style="grid-column:1/-1;">
+        <div class="tile-label"><i class="fas fa-location-dot" style="margin-right:4px;"></i> Adresse</div>
+        <div class="tile-value" style="font-size:13px; white-space:pre-line;">{{ user.address }}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <!-- Sécurité -->

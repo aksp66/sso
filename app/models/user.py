@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, SmallInteger, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, SmallInteger, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -86,6 +86,15 @@ class User(db.Model):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # ── Profil étendu (tous optionnels) ────────────────────────────────────
+    full_name:  Mapped[Optional[str]]      = mapped_column(String(120), nullable=True)
+    phone:      Mapped[Optional[str]]      = mapped_column(String(30),  nullable=True)
+    birth_date: Mapped[Optional[object]]   = mapped_column(Date,         nullable=True)
+    gender:     Mapped[Optional[str]]      = mapped_column(String(20),   nullable=True)
+    address:    Mapped[Optional[str]]      = mapped_column(Text,          nullable=True)
+    # Avatar stocké en base64 JPEG (data:image/jpeg;base64,…) — 160×160 max
+    avatar:     Mapped[Optional[str]]      = mapped_column(Text,          nullable=True)
 
     # ── Protection contre brute-force ──────────────────────────────────────
     failed_login_count: Mapped[int] = mapped_column(

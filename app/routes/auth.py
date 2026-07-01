@@ -341,6 +341,55 @@ def revoke_app():
     flash('Accès de l\'application révoqué avec succès.', 'success')
     return redirect(url_for('auth.profile'))
 
+@auth_bp.route('/profile/edit', methods=['GET', 'POST'])
+def edit_profile():
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+
+    errors = []
+    if request.method == 'POST':
+        user.full_name  = request.form.get('full_name',  '').strip() or None
+        user.phone      = request.form.get('phone',      '').strip() or None
+        user.gender     = request.form.get('gender',     '').strip() or None
+        user.address    = request.form.get('address',    '').strip() or None
+
+        raw_bd = request.form.get('birth_date', '').strip()
+        if raw_bd:
+            from datetime import date
+            try:
+                user.birth_date = date.fromisoformat(raw_bd)
+            except ValueError:
+                errors.append("Format de date invalide (AAAA-MM-JJ attendu).")
+        else:
+            user.birth_date = None
+
+        # Avatar : redimension 160×160 JPEG → base64 en DB
+        avatar_file = request.files.get('avatar')
+        if avatar_file and avatar_file.filename:
+            import io, base64
+            from PIL import Image
+            try:
+                img = Image.open(avatar_file.stream).convert('RGB')
+                img.thumbnail((160, 160), Image.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=85, optimize=True)
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                user.avatar = f"data:image/jpeg;base64,{b64}"
+            except Exception:
+                errors.append("Fichier image invalide (JPEG/PNG/WebP acceptés).")
+
+        if not errors:
+            db.session.commit()
+            flash('Profil mis à jour avec succès.', 'success')
+            return redirect(url_for('auth.profile'))
+
+    return render_template('edit_profile.html', user=user, errors=errors)
+
+
 _RESET_TTL = 3600  # 1 heure
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])

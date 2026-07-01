@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Modifier mon profil — Nexus{% endblock %}
+
+{% block extra_head %}
+<style>
+  .edit-wrap { max-width:640px; margin:0 auto; padding:48px 24px; animation:fadeUp 0.45s ease both; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  .field-group { margin-bottom:18px; }
+  .avatar-upload {
+    display:flex; align-items:center; gap:20px; margin-bottom:24px;
+    padding:20px; background:rgba(255,255,255,0.03);
+    border:1px solid var(--glass-border); border-radius:14px;
+  }
+  .avatar-preview {
+    width:80px; height:80px; border-radius:18px; flex-shrink:0;
+    object-fit:cover; border:2px solid var(--glass-border);
+  }
+  .avatar-initials {
+    width:80px; height:80px; border-radius:18px; flex-shrink:0;
+    background:linear-gradient(135deg,#1D4ED8,#0369A1);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Outfit',sans-serif; font-size:30px; font-weight:700; color:#fff;
+  }
+  .upload-label {
+    display:inline-flex; align-items:center; gap:7px;
+    background:var(--glass-bg-strong); border:1px solid var(--glass-border);
+    color:var(--text-secondary); font-family:'Outfit',sans-serif;
+    font-size:13px; font-weight:500; padding:9px 16px;
+    border-radius:9px; cursor:pointer; transition:all 0.2s;
+  }
+  .upload-label:hover { border-color:var(--glass-border-hover); color:var(--text-primary); }
+  #avatar-input { display:none; }
+  .hint { font-size:11px; color:var(--text-muted); margin-top:4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="edit-wrap">
+
+  <div style="display:flex; align-items:center; gap:14px; margin-bottom:28px;">
+    <a href="{{ url_for('auth.profile') }}"
+       style="color:var(--text-muted); font-size:13px; text-decoration:none; display:flex; align-items:center; gap:6px;">
+      <i class="fas fa-arrow-left"></i> Profil
+    </a>
+    <span style="color:var(--glass-border);">/</span>
+    <span style="font-size:13px; color:var(--text-secondary);">Modifier</span>
+  </div>
+
+  <div class="glass" style="padding:36px 32px;">
+    <p style="font-family:'Outfit',sans-serif; font-size:13px; font-weight:700;
+              letter-spacing:0.08em; text-transform:uppercase; color:var(--blue-400);
+              margin:0 0 6px;">Profil</p>
+    <h1 style="font-size:22px; font-weight:800; letter-spacing:-0.02em; margin:0 0 24px;">
+      Modifier mes informations
+    </h1>
+
+    {% if errors %}
+      {% for err in errors %}
+        <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> {{ err }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <!-- ── Avatar ── -->
+      <div class="avatar-upload">
+        {% if user.avatar %}
+          <img src="{{ user.avatar }}" class="avatar-preview" id="avatar-preview" alt="Avatar" />
+        {% else %}
+          <div class="avatar-initials" id="avatar-initials">{{ user.username[0].upper() }}</div>
+          <img src="" class="avatar-preview" id="avatar-preview" alt="Avatar"
+               style="display:none;" />
+        {% endif %}
+        <div>
+          <label for="avatar-input" class="upload-label">
+            <i class="fas fa-camera"></i> Changer la photo
+          </label>
+          <input type="file" name="avatar" id="avatar-input"
+                 accept="image/jpeg,image/png,image/webp" />
+          <p class="hint">JPEG, PNG ou WebP · max 5 Mo · redimensionné à 160×160</p>
+        </div>
+      </div>
+
+      <!-- ── Champs en grille ── -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+
+        <div class="field-group" style="grid-column:1/-1;">
+          <label class="label">Nom complet <span style="color:var(--text-muted); font-weight:400;">(optionnel)</span></label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-user input-icon"></i>
+            <input type="text" name="full_name" class="input-field"
+                   placeholder="Prénom Nom"
+                   value="{{ user.full_name or '' }}" maxlength="120" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="label">Téléphone</label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-phone input-icon"></i>
+            <input type="tel" name="phone" class="input-field"
+                   placeholder="+228 90 00 00 00"
+                   value="{{ user.phone or '' }}" maxlength="30" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="label">Date de naissance</label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-cake-candles input-icon"></i>
+            <input type="date" name="birth_date" class="input-field"
+                   value="{{ user.birth_date.isoformat() if user.birth_date else '' }}" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="label">Genre</label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-venus-mars input-icon"></i>
+            <select name="gender" class="input-field" style="appearance:none;">
+              <option value="">— Non précisé —</option>
+              <option value="Homme"  {% if user.gender == 'Homme'  %}selected{% endif %}>Homme</option>
+              <option value="Femme"  {% if user.gender == 'Femme'  %}selected{% endif %}>Femme</option>
+              <option value="Autre"  {% if user.gender == 'Autre'  %}selected{% endif %}>Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group" style="grid-column:1/-1;">
+          <label class="label">Adresse</label>
+          <div class="input-wrap" style="position:relative;">
+            <i class="fas fa-location-dot input-icon" style="top:14px;transform:none;"></i>
+            <textarea name="address" class="input-field input-no-icon"
+                      style="padding-left:42px; resize:vertical; min-height:72px;"
+                      placeholder="Rue, ville, pays" maxlength="500">{{ user.address or '' }}</textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Info e-mail/username non modifiables ── -->
+      <div style="background:rgba(255,255,255,0.03); border:1px solid var(--glass-border);
+                  border-radius:12px; padding:14px 16px; margin:8px 0 24px;
+                  font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px;">
+        <i class="fas fa-circle-info" style="color:var(--blue-400);"></i>
+        Nom d'utilisateur et adresse e-mail ne peuvent être modifiés ici. Contactez un administrateur si nécessaire.
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button type="submit" class="btn-primary" style="width:auto; padding:11px 28px;">
+          <i class="fas fa-floppy-disk"></i> Enregistrer
+        </button>
+        <a href="{{ url_for('auth.profile') }}" class="btn-outline">Annuler</a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  document.getElementById('avatar-input').addEventListener('change', function () {
+    var file = this.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var preview = document.getElementById('avatar-preview');
+      var initials = document.getElementById('avatar-initials');
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      if (initials) initials.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  });
+</script>
+{% endblock %}
