@@ -62,15 +62,15 @@ Serveur d'authentification unique (Single Sign-On) conforme OAuth 2.0, OpenID Co
 
 | Composant | Rôle |
 |---|---|
-| `app/routes/auth.py` | Login, logout, profil, reset mot de passe |
+| `app/routes/auth.py` | Login, logout, profil, paramètres (username / e-mail / mot de passe), reset mot de passe |
 | `app/routes/oauth2.py` | Flux OAuth2 : `/authorize`, `/token`, `/userinfo`, `/revoke`, `/jwks.json` |
 | `app/routes/twofa.py` | Enrollment TOTP, vérification, codes de secours |
 | `app/routes/admin.py` | CRUD utilisateurs, clients OAuth2, journal d'audit |
 | `app/routes/health.py` | `/health` et `/` |
 | `app/services/key_service.py` | Génération / rotation RS256, chiffrement AES-256-GCM |
 | `app/services/totp_service.py` | TOTP RFC 6238, QR code, backup codes bcrypt |
-| `app/services/email_service.py` | Envoi SMTP (reset mot de passe) |
-| `app/models/` | SQLAlchemy 2.0 : User, OAuth2Client, OAuth2Token, AuditLog, RS256Key, OAuth2Consent |
+| `app/services/email_service.py` | Envoi SMTP : vérification compte, reset mot de passe, changement d'e-mail, identifiants client OAuth2 |
+| `app/models/` | SQLAlchemy 2.0 : User (avec profil étendu), OAuth2Client, OAuth2Token, AuditLog, RS256Key, OAuth2Consent |
 
 ---
 
@@ -101,20 +101,13 @@ docker compose up --build
 # Si nécessaire manuellement :
 docker compose exec web flask db upgrade
 
-# 5. Créer un compte administrateur
-docker compose exec web python -c "
-from app import create_app
-from app.extensions import db, bcrypt
-from app.models.user import User
-app = create_app()
-with app.app_context():
-    u = User(username='admin', email='admin@example.com',
-             password_hash=bcrypt.generate_password_hash('ChangeMe123!').decode(),
-             is_admin=True, is_active=True)
-    db.session.add(u)
-    db.session.commit()
-    print('Admin créé')
-"
+# 5. Créer le premier compte administrateur (bootstrap automatique)
+# Ajouter ces variables dans .env avant de lancer :
+#   ADMIN_BOOTSTRAP_EMAIL=admin@example.com
+#   ADMIN_BOOTSTRAP_USERNAME=admin
+#   ADMIN_BOOTSTRAP_PASSWORD=ChangeMe123!
+# Au démarrage, Nexus crée automatiquement l'admin s'il n'en existe aucun.
+# Retirer ces 3 variables du .env après le premier démarrage.
 ```
 
 L'application est disponible sur **<http://localhost:8000>**.
@@ -158,6 +151,9 @@ flask run --port 8000
 | `BCRYPT_LOG_ROUNDS` | — | Coût bcrypt (défaut : 12) | `12` |
 | `ACCESS_TOKEN_EXPIRE_SECONDS` | — | Durée de vie access token (défaut : 3600) | `3600` |
 | `REFRESH_TOKEN_EXPIRE_SECONDS` | — | Durée de vie refresh token (défaut : 30 jours) | `2592000` |
+| `ADMIN_BOOTSTRAP_EMAIL` | — | E-mail du premier admin (bootstrap au démarrage) | `admin@example.com` |
+| `ADMIN_BOOTSTRAP_USERNAME` | — | Nom d'utilisateur du premier admin | `admin` |
+| `ADMIN_BOOTSTRAP_PASSWORD` | — | Mot de passe du premier admin (**supprimer après le 1er démarrage**) | — |
 
 > **Production :** `SECRET_KEY` et `AES_ENCRYPTION_KEY` doivent être définies. L'application lève une `RuntimeError` au démarrage sinon.
 
@@ -367,13 +363,25 @@ Après validation du mot de passe, si `totp_enabled = true` :
 
 Les événements suivants sont automatiquement enregistrés dans `audit_logs` :
 
-`login_success`, `login_failure`, `account_locked`, `logout`, `2fa_enabled`, `2fa_failure`, `backup_code_used`, `token_issued`, `token_refresh`, `token_revoked`, `consent_granted`, `password_reset`
+`login_success`, `login_failure`, `account_locked`, `logout`, `2fa_enabled`, `2fa_failure`, `backup_code_used`, `token_issued`, `token_refresh`, `token_revoked`, `consent_granted`, `password_reset`, `password_changed`, `email_verified`
 
 ---
 
 ## Administration
 
 Accès : `/admin` — réservé aux utilisateurs `is_admin = true` avec 2FA obligatoirement activée.
+
+### Bootstrap du premier administrateur
+
+Au premier démarrage, si aucun compte admin n'existe, Nexus en crée un automatiquement à partir de trois variables d'environnement :
+
+```env
+ADMIN_BOOTSTRAP_EMAIL=admin@example.com
+ADMIN_BOOTSTRAP_USERNAME=admin
+ADMIN_BOOTSTRAP_PASSWORD=MotDePasseFort!
+```
+
+Si un compte avec cet e-mail existe déjà mais n'est pas admin, il est promu. Supprimer ces trois variables après le premier démarrage réussi.
 
 | Route | Description |
 |---|---|
