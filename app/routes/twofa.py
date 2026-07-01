@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
-from app.extensions import db, csrf, limiter
+from app.extensions import db, csrf, limiter, bcrypt
 from app.models.user import User
 from app.models.audit_log import (
     AuditLog,
@@ -9,7 +9,6 @@ from app.models.audit_log import (
 )
 from app.services.totp_service import TOTPService
 import uuid
-import bcrypt
 
 twofa_bp = Blueprint('twofa', __name__, url_prefix='/2fa')
 
