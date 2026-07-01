@@ -66,6 +66,10 @@ def create_app(config_name: str | None = None) -> Flask:
         from .models.rs256_key import RS256Key
         from .models.user import User
 
+    # ── Bootstrap admin (premier démarrage) ───────────────────────────────
+    if not app.config.get('TESTING'):
+        _bootstrap_admin(app)
+
     # ── Client Redis ───────────────────────────────────────────────────────
     init_redis(app.config["REDIS_URL"])
 
@@ -109,6 +113,48 @@ def create_app(config_name: str | None = None) -> Flask:
         scheduler.start()
 
     return app
+
+def _bootstrap_admin(app: Flask) -> None:
+    """Crée le premier compte admin si ADMIN_BOOTSTRAP_EMAIL et
+    ADMIN_BOOTSTRAP_PASSWORD sont définis ET qu'aucun admin n'existe."""
+    email    = app.config.get("ADMIN_BOOTSTRAP_EMAIL",    "").strip()
+    password = app.config.get("ADMIN_BOOTSTRAP_PASSWORD", "").strip()
+    username = app.config.get("ADMIN_BOOTSTRAP_USERNAME", "admin").strip() or "admin"
+
+    if not email or not password:
+        return  # Variables non configurées → rien à faire
+
+    with app.app_context():
+        from .models.user import User
+        from .extensions import bcrypt, db
+
+        if User.query.filter_by(is_admin=True).first():
+            return  # Au moins un admin existe déjà → on ne touche à rien
+
+        existing = User.query.filter(
+            (User.email == email) | (User.username == username)
+        ).first()
+        if existing:
+            # Le compte existe mais n'est pas encore admin → on le promeut
+            existing.is_admin = True
+            existing.is_active = True
+            existing.email_verified = True
+            db.session.commit()
+            app.logger.info(f"Bootstrap : compte existant promu admin ({email})")
+            return
+
+        admin = User(
+            username=username,
+            email=email,
+            password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
+            is_admin=True,
+            is_active=True,
+            email_verified=True,
+        )
+        db.session.add(admin)
+        db.session.commit()
+        app.logger.info(f"Bootstrap : compte admin créé ({email})")
+
 
 def _configure_security_headers(app: Flask) -> None:
     @app.after_request

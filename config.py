@@ -108,6 +108,14 @@ class Config:
         os.environ.get("AUTHORIZATION_CODE_EXPIRE_SECONDS", "300")
     )
 
+    # ── Bootstrap admin (premier démarrage) ───────────────────────────────
+    # Si aucun admin n'existe et que ces deux variables sont définies,
+    # create_app() crée automatiquement le compte admin au démarrage.
+    # Retirer les variables après le premier deploy pour désactiver.
+    ADMIN_BOOTSTRAP_EMAIL:    str = os.environ.get("ADMIN_BOOTSTRAP_EMAIL",    "")
+    ADMIN_BOOTSTRAP_USERNAME: str = os.environ.get("ADMIN_BOOTSTRAP_USERNAME", "admin")
+    ADMIN_BOOTSTRAP_PASSWORD: str = os.environ.get("ADMIN_BOOTSTRAP_PASSWORD", "")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
