@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Déconnecté — Nexus{% endblock %}
+{% block content %}
+<div style="max-width:480px; margin:80px auto; padding:0 20px; text-align:center; animation:fadeUp .4s ease both;">
+  <div class="glass" style="padding:40px 36px;">
+    <div style="width:64px; height:64px; border-radius:18px; margin:0 auto 24px;
+                background:linear-gradient(135deg,#1D4ED8,#0369A1);
+                display:flex; align-items:center; justify-content:center;
+                box-shadow:0 8px 28px rgba(29,78,216,.4);">
+      <i class="fas fa-right-from-bracket" style="color:#fff; font-size:26px;"></i>
+    </div>
+    <h1 style="font-family:'Outfit',sans-serif; font-size:22px; font-weight:700; margin-bottom:10px;">
+      Déconnecté avec succès
+    </h1>
+    <p style="color:var(--text-muted); font-size:14px; line-height:1.6; margin-bottom:28px;">
+      Vous avez été déconnecté de Nexus et de toutes les applications liées à votre session.
+    </p>
+    <a href="{{ url_for('auth.login') }}" class="btn-primary" style="text-decoration:none;">
+      <i class="fas fa-arrow-right-to-bracket"></i> Se reconnecter
+    </a>
+  </div>
+</div>
+{% endblock %}
