@@ -15,7 +15,12 @@ from app.models.audit_log import (
     EVENT_EMAIL_VERIFIED,
 )
 from app.services.session_service import create_user_session
-from app.services.email_service import send_password_reset_email, send_verification_email, send_email_change_email
+from app.services.email_service import (
+    send_password_reset_email, send_verification_email,
+    send_email_change_email, send_client_credentials_email,
+    send_client_request_rejected_email,
+)
+from app.models.client_request import ClientRequest, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED
 import uuid
 import secrets
 import hashlib
@@ -247,10 +252,14 @@ def finalize_login():
     user = User.query.get(uuid.UUID(user_id))
     if not user:
         return redirect(url_for('auth.login'))
-    # Créer la session Redis
+    # Créer la session Redis + timestamps pour le sliding timeout IdP
+    import time as _time
     session_id = create_user_session(user.id, request.remote_addr, request.user_agent.string)
+    _now = _time.time()
     session['user_id'] = str(user.id)
     session['session_id'] = session_id
+    session['session_created_at'] = _now
+    session['last_activity'] = _now
     AuditLog.log(
         event_type=EVENT_LOGIN_SUCCESS,
         ip_address=request.remote_addr,
@@ -387,7 +396,19 @@ def edit_profile():
             flash('Profil mis à jour avec succès.', 'success')
             return redirect(url_for('auth.profile'))
 
-    return render_template('edit_profile.html', user=user, errors=errors)
+    admin_users = admin_clients = admin_requests = admin_audit = []
+    if user.is_admin:
+        admin_users    = User.query.order_by(User.created_at.desc()).all()
+        admin_clients  = OAuth2Client.query.order_by(OAuth2Client.client_name).all()
+        admin_requests = (ClientRequest.query
+                          .filter_by(status=STATUS_PENDING)
+                          .order_by(ClientRequest.submitted_at.desc()).all())
+        admin_audit    = (AuditLog.query
+                          .order_by(AuditLog.created_at.desc()).limit(60).all())
+
+    return render_template('edit_profile.html', user=user, errors=errors,
+                           admin_users=admin_users, admin_clients=admin_clients,
+                           admin_requests=admin_requests, admin_audit=admin_audit)
 
 
 @auth_bp.route('/profile/change-password', methods=['POST'])
@@ -498,6 +519,128 @@ def confirm_email_change(token: str):
     db.session.commit()
     flash('Adresse e-mail mise à jour avec succès.', 'success')
     return redirect(url_for('auth.profile'))
+
+
+def _require_admin():
+    """Vérifie que la session est active et que l'utilisateur est admin."""
+    if 'user_id' not in session:
+        return None, redirect(url_for('auth.login'))
+    user = User.query.get(uuid.UUID(session['user_id']))
+    if not user or not user.is_admin:
+        flash('Accès interdit.', 'danger')
+        return None, redirect(url_for('auth.profile'))
+    return user, None
+
+
+@auth_bp.route('/profile/admin/users/<uuid:target_id>/toggle', methods=['POST'])
+def admin_toggle_user(target_id):
+    admin, err = _require_admin()
+    if err: return err
+    target = User.query.get_or_404(target_id)
+    if target.id == admin.id:
+        flash('Impossible de modifier votre propre statut.', 'danger')
+    else:
+        target.is_active = not target.is_active
+        db.session.commit()
+        flash(f'Compte {target.username} {"activé" if target.is_active else "désactivé"}.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+
+
+@auth_bp.route('/profile/admin/users/<uuid:target_id>/reset-2fa', methods=['POST'])
+def admin_reset_2fa(target_id):
+    admin, err = _require_admin()
+    if err: return err
+    target = User.query.get_or_404(target_id)
+    if target.id == admin.id:
+        flash('Vous ne pouvez pas réinitialiser votre propre 2FA.', 'danger')
+    else:
+        target.totp_enabled = False
+        target.totp_secret  = None
+        target.backup_codes = None
+        db.session.commit()
+        flash(f'2FA réinitialisée pour {target.username}.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+
+
+@auth_bp.route('/profile/admin/users/<uuid:target_id>/promote', methods=['POST'])
+def admin_promote_user(target_id):
+    admin, err = _require_admin()
+    if err: return err
+    target = User.query.get_or_404(target_id)
+    target.is_admin = not target.is_admin
+    db.session.commit()
+    flash(f'Rôle {"admin accordé" if target.is_admin else "admin retiré"} pour {target.username}.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+
+
+@auth_bp.route('/profile/admin/clients/<string:client_id>/toggle', methods=['POST'])
+def admin_toggle_client(client_id):
+    admin, err = _require_admin()
+    if err: return err
+    client = OAuth2Client.query.filter_by(client_id=client_id).first_or_404()
+    client.is_active = not client.is_active
+    db.session.commit()
+    flash(f'Application {client.client_name} {"activée" if client.is_active else "désactivée"}.', 'success')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+
+
+@auth_bp.route('/profile/admin/requests/<uuid:req_id>/approve', methods=['POST'])
+def admin_approve_request(req_id):
+    admin, err = _require_admin()
+    if err: return err
+    req = ClientRequest.query.get_or_404(req_id)
+    if not req.is_pending():
+        flash('Demande déjà traitée.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+    from app.extensions import bcrypt as _bcrypt
+    import secrets as _sec
+    client_id     = _sec.token_urlsafe(16)
+    client_secret = _sec.token_urlsafe(32) if req.is_confidential else None
+    client = OAuth2Client(
+        client_id=client_id,
+        client_secret_hash=_bcrypt.generate_password_hash(client_secret).decode() if client_secret else '',
+        client_name=req.client_name,
+        redirect_uris=req.redirect_uris,
+        allowed_scopes=req.requested_scopes,
+        grant_types=['authorization_code', 'refresh_token'],
+        is_confidential=req.is_confidential,
+        is_active=True,
+    )
+    db.session.add(client)
+    req.status          = STATUS_APPROVED
+    req.reviewed_at     = datetime.now(timezone.utc)
+    req.reviewed_by     = admin.id
+    req.created_client_id = client_id
+    db.session.commit()
+    try:
+        send_client_credentials_email(req.contact_email, req.client_name, client_id, client_secret)
+        flash(f'Application « {req.client_name} » approuvée — identifiants envoyés par e-mail.', 'success')
+    except Exception as exc:
+        current_app.logger.error(f"Email credentials échoué: {exc}")
+        flash(f'Approuvée (client_id : {client_id}) — envoi e-mail échoué, transmettre manuellement.', 'warning')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+
+
+@auth_bp.route('/profile/admin/requests/<uuid:req_id>/reject', methods=['POST'])
+def admin_reject_request(req_id):
+    admin, err = _require_admin()
+    if err: return err
+    req = ClientRequest.query.get_or_404(req_id)
+    if not req.is_pending():
+        flash('Demande déjà traitée.', 'danger')
+        return redirect(url_for('auth.edit_profile', _anchor='nexus'))
+    reason           = request.form.get('reason', '').strip() or None
+    req.status       = STATUS_REJECTED
+    req.reviewed_at  = datetime.now(timezone.utc)
+    req.reviewed_by  = admin.id
+    req.rejection_reason = reason
+    db.session.commit()
+    try:
+        send_client_request_rejected_email(req.contact_email, req.client_name, reason)
+    except Exception as exc:
+        current_app.logger.error(f"Email refus échoué: {exc}")
+    flash(f'Demande « {req.client_name} » refusée.', 'info')
+    return redirect(url_for('auth.edit_profile', _anchor='nexus'))
 
 
 _RESET_TTL = 3600  # 1 heure
