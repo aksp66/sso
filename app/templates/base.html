@@ -339,6 +339,16 @@
       z-index: 1;
       min-height: 100vh;
     }
+
+    /* ── Responsive global ── */
+    @media (max-width: 600px) {
+      .input-field   { font-size: 16px; } /* évite le zoom auto iOS sur les inputs */
+      .btn-primary, .btn-outline, .btn-danger {
+        font-size: 14px;
+        padding: 11px 18px;
+      }
+      .badge { font-size: 10px; padding: 3px 8px; }
+    }
   </style>
 
   {% block extra_head %}{% endblock %}

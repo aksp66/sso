@@ -6,7 +6,7 @@
   .profile-wrap {
     max-width: 680px;
     margin: 0 auto;
-    padding: 48px 24px;
+    padding: 40px 20px;
     animation: fadeUp 0.45s ease both;
   }
   @keyframes fadeUp {
@@ -14,9 +14,11 @@
     to   { opacity:1; transform:translateY(0); }
   }
   .profile-header {
-    display:flex; align-items:center; gap:20px;
-    margin-bottom:32px;
+    display:flex; align-items:flex-start; gap:16px;
+    margin-bottom:28px; flex-wrap:wrap;
   }
+  .profile-header-info { flex:1; min-width:0; }
+  .profile-header-btn  { flex-shrink:0; align-self:center; }
   .avatar {
     width:72px; height:72px; border-radius:20px;
     background:linear-gradient(135deg,#1D4ED8,#0369A1);
@@ -37,7 +39,15 @@
     display:grid; grid-template-columns:1fr 1fr;
     gap:12px; margin-bottom:20px;
   }
-  @media (max-width:520px) { .info-grid { grid-template-columns:1fr; } }
+  @media (max-width:600px) {
+    .profile-wrap { padding:20px 14px; }
+    .profile-wrap .glass { padding:20px 18px !important; }
+    .info-grid { grid-template-columns:1fr; }
+    .profile-header-btn { width:100%; }
+    .profile-header-btn .btn-outline { width:100%; justify-content:center; }
+    .action-row { flex-direction:column; }
+    .action-row a, .action-row button { width:100%; justify-content:center; text-align:center; }
+  }
   .info-tile {
     background:rgba(255,255,255,0.04);
     border:1px solid var(--glass-border);
@@ -108,17 +118,17 @@
     <div class="profile-header">
       {% if user.avatar %}
         <img src="{{ user.avatar }}" alt="Avatar"
-             style="width:72px;height:72px;border-radius:20px;object-fit:cover;
+             style="width:64px;height:64px;border-radius:18px;object-fit:cover;
                     border:2px solid var(--glass-border);flex-shrink:0;" />
       {% else %}
         <div class="avatar">{{ user.username[0].upper() }}</div>
       {% endif %}
-      <div style="flex:1;">
-        <div class="profile-name">{{ user.full_name or user.username }}</div>
+      <div class="profile-header-info">
+        <div class="profile-name" style="word-break:break-word;">{{ user.full_name or user.username }}</div>
         {% if user.full_name %}
           <div style="font-size:12px; color:var(--text-muted); margin-top:1px;">@{{ user.username }}</div>
         {% endif %}
-        <div class="profile-email">{{ user.email }}</div>
+        <div class="profile-email" style="word-break:break-all;">{{ user.email }}</div>
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
           {% if user.is_admin %}
             <span class="badge badge-blue"><i class="fas fa-crown"></i> Administrateur</span>
@@ -130,9 +140,11 @@
           {% endif %}
         </div>
       </div>
-      <a href="{{ url_for('auth.edit_profile') }}" class="btn-outline" style="flex-shrink:0;">
-        <i class="fas fa-gear"></i> Paramètres
-      </a>
+      <div class="profile-header-btn">
+        <a href="{{ url_for('auth.edit_profile') }}" class="btn-outline">
+          <i class="fas fa-gear"></i> Paramètres
+        </a>
+      </div>
     </div>
 
     <!-- Infos compte -->

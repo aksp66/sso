@@ -26,7 +26,7 @@ _LOCKOUT_THRESHOLD = 10
 _LOCKOUT_DURATION_MINUTES = 15
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def login():
     if request.method == 'POST':
         email = request.form.get('email')
@@ -106,7 +106,7 @@ def _issue_verification_email(user: User) -> None:
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
-@limiter.limit("10 per hour")
+@limiter.limit("20 per hour")
 def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
