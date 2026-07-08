@@ -99,11 +99,18 @@ def openid_config():
         "userinfo_endpoint": f"{issuer}/userinfo",
         "jwks_uri": f"{issuer}/jwks.json",
         "revocation_endpoint": f"{issuer}/revoke",
+        "end_session_endpoint": f"{issuer}/connect/end_session",
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
         "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"]
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "prompt_values_supported": ["login", "none"],
+        "claims_supported": ["sub", "email", "email_verified", "name", "preferred_username"],
+        "backchannel_logout_supported": True,
+        "backchannel_logout_session_supported": True,
+        "frontchannel_logout_supported": True,
+        "frontchannel_logout_session_supported": False,
     })
 
 @oauth2_bp.route('/jwks.json')
