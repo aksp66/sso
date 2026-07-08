@@ -108,6 +108,16 @@ class Config:
         os.environ.get("AUTHORIZATION_CODE_EXPIRE_SECONDS", "300")
     )
 
+    # ── Session SSO (deux niveaux) ───────────────────────────────────────
+    # Timeout d'inactivité IdP (sliding) : session réinitialisée à chaque requête
+    IDP_SESSION_IDLE_SECONDS: int = int(
+        os.environ.get("IDP_SESSION_IDLE_SECONDS", str(8 * 3600))   # 8 h par défaut
+    )
+    # Timeout absolu IdP : durée maximale quelle que soit l'activité
+    IDP_SESSION_ABSOLUTE_SECONDS: int = int(
+        os.environ.get("IDP_SESSION_ABSOLUTE_SECONDS", str(12 * 3600))  # 12 h par défaut
+    )
+
     # ── Bootstrap admin (premier démarrage) ───────────────────────────────
     # Si aucun admin n'existe et que ces deux variables sont définies,
     # create_app() crée automatiquement le compte admin au démarrage.

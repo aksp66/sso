@@ -1,8 +1,10 @@
 import os
+import time
 import hashlib
 import base64
 import uuid
-from urllib.parse import urlencode
+import urllib.request as _urlreq
+from urllib.parse import urlencode, urljoin
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, redirect, render_template, session, current_app, jsonify, abort
 from werkzeug.exceptions import BadRequest
@@ -20,9 +22,11 @@ from app.models.audit_log import (
     EVENT_TOKEN_REVOKED,
     EVENT_TOKEN_REFRESH,
     EVENT_CONSENT_GRANTED,
+    EVENT_LOGOUT,
+    EVENT_SLO_LOGOUT,
 )
 from app.services.key_service import KeyService
-from app.services.session_service import create_user_session
+from app.services.session_service import create_user_session, delete_user_session
 import jwt
 
 oauth2_bp = Blueprint('oauth2', __name__)
@@ -136,6 +140,8 @@ def authorize():
     nonce = request.args.get('nonce')
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method', '')
+    prompt = request.args.get('prompt', '')
+    max_age_param = request.args.get('max_age')
     if response_type != 'code':
         abort(400, description='response_type must be code')
     # Validation client
@@ -149,8 +155,38 @@ def authorize():
     # PKCE obligatoire pour les clients publics (RFC 7636 §4.1)
     if not client.is_confidential and not code_challenge:
         abort(400, description='PKCE required for public clients')
-    # Session utilisateur
+    # ── prompt / max_age (OIDC Core §3.1.2.1) ────────────────────────────
     user_id = session.get('user_id')
+
+    # prompt=login → forcer une re-authentification même si déjà connecté
+    if prompt == 'login' and user_id:
+        session.pop('user_id', None)
+        session.pop('session_id', None)
+        session.pop('session_created_at', None)
+        session.pop('last_activity', None)
+        user_id = None
+
+    # prompt=none → ne pas interagir avec l'utilisateur, erreur si non connecté
+    if prompt == 'none' and not user_id:
+        err_params = {'error': 'login_required', 'error_description': 'User is not authenticated'}
+        if state:
+            err_params['state'] = state
+        return redirect(f"{redirect_uri}?{urlencode(err_params)}")
+
+    # max_age → si la session est plus ancienne que max_age secondes, forcer re-auth
+    if max_age_param and user_id:
+        try:
+            max_age_s = int(max_age_param)
+            session_start = session.get('session_created_at', 0)
+            if time.time() - session_start > max_age_s:
+                session.pop('user_id', None)
+                session.pop('session_id', None)
+                session.pop('session_created_at', None)
+                session.pop('last_activity', None)
+                user_id = None
+        except (ValueError, TypeError):
+            pass
+
     if not user_id:
         # Non connecté : afficher login
         if request.method == 'POST':
@@ -164,10 +200,14 @@ def authorize():
                     **request.args,
                 )
             if user and bcrypt.check_password_hash(user.password_hash, password):
-                # Créer session Redis
+                # Créer session Redis + timestamps IdP
+                import time as _time
                 session_id = create_user_session(user.id, request.remote_addr, request.user_agent.string)
+                _now = _time.time()
                 session['user_id'] = str(user.id)
                 session['session_id'] = session_id
+                session['session_created_at'] = _now
+                session['last_activity'] = _now
                 # Rediriger vers GET /authorize avec les mêmes params
                 return redirect(request.url)
             else:
@@ -530,6 +570,134 @@ def revoke():
                 )
                 db.session.commit()
     return jsonify({}), 200
+
+# ----------------------------------------------------------------------
+# /connect/end_session  (OIDC RP-Initiated Logout — RFC 9470 §4)
+# ----------------------------------------------------------------------
+@oauth2_bp.route('/connect/end_session', methods=['GET', 'POST'])
+@csrf.exempt
+@limiter.limit("30 per minute")
+def end_session():
+    """Point de déconnexion global (SLO — Single Log-Out).
+
+    Paramètres OIDC reconnus :
+      - id_token_hint        : JWT de l'ID token (optionnel, sert à identifier le client)
+      - post_logout_redirect_uri : URI de retour après déconnexion
+      - state                : repris dans la redirection finale
+    """
+    id_token_hint           = request.values.get('id_token_hint')
+    post_logout_redirect_uri = request.values.get('post_logout_redirect_uri')
+    state                   = request.values.get('state')
+
+    user_id = session.get('user_id')
+    user = None
+    if user_id:
+        try:
+            user = User.query.get(uuid.UUID(user_id))
+        except Exception:
+            pass
+
+    if user:
+        # 1. Back-channel logout vers tous les clients actifs
+        _broadcast_backchannel_logout(user)
+
+        # 2. Révoquer tous les refresh tokens actifs
+        now_utc = datetime.now(timezone.utc)
+        OAuth2Token.query.filter(
+            OAuth2Token.user_id == user.id,
+            OAuth2Token.revoked_at.is_(None),
+        ).update({'revoked_at': now_utc})
+        db.session.commit()
+
+        # 3. Supprimer la session Redis
+        sid = session.get('session_id')
+        if sid:
+            try:
+                delete_user_session(sid)
+            except Exception:
+                pass
+
+        # 4. Audit
+        AuditLog.log(
+            event_type=EVENT_SLO_LOGOUT,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            user_agent=request.user_agent.string,
+            details={'id_token_hint_present': bool(id_token_hint)},
+        )
+
+    session.clear()
+
+    # Validation de l'URI de retour : doit correspondre à une redirect_uri enregistrée
+    if post_logout_redirect_uri and _is_valid_post_logout_uri(post_logout_redirect_uri):
+        params = {}
+        if state:
+            params['state'] = state
+        dest = post_logout_redirect_uri
+        if params:
+            dest += ('&' if '?' in dest else '?') + urlencode(params)
+        return redirect(dest)
+
+    # Pas d'URI fournie ou invalide : page de confirmation de déconnexion
+    return render_template('logged_out.html')
+
+
+def _broadcast_backchannel_logout(user: 'User') -> None:
+    """Envoie un logout token (JWT signé) à chaque client ayant une session active.
+
+    Best-effort : les erreurs réseau ne font pas échouer la déconnexion.
+    Conforme à OIDC Back-Channel Logout 1.0 §2.4.
+    """
+    active_tokens = OAuth2Token.query.filter(
+        OAuth2Token.user_id == user.id,
+        OAuth2Token.revoked_at.is_(None),
+    ).all()
+    notified_clients: set = set()
+    sid = session.get('session_id', str(uuid.uuid4()))
+
+    for token in active_tokens:
+        if token.client_id in notified_clients:
+            continue
+        client = OAuth2Client.query.filter_by(client_id=token.client_id).first()
+        if not client or not client.backchannel_logout_uri:
+            notified_clients.add(token.client_id)
+            continue
+        notified_clients.add(token.client_id)
+        try:
+            logout_token = _sign_jwt(
+                {
+                    'sub': str(user.id),
+                    'aud': client.client_id,
+                    'sid': sid,
+                    'events': {
+                        'http://schemas.openid.net/event/backchannel-logout': {}
+                    },
+                },
+                expires_in=60,
+            )
+            body = urlencode({'logout_token': logout_token}).encode()
+            req = _urlreq.Request(
+                client.backchannel_logout_uri,
+                data=body,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                method='POST',
+            )
+            _urlreq.urlopen(req, timeout=5)
+        except Exception:
+            pass  # Best-effort, ne pas bloquer la déconnexion
+
+
+def _is_valid_post_logout_uri(uri: str) -> bool:
+    """Valide qu'une URI de retour est enregistrée chez au moins un client actif."""
+    if not uri:
+        return False
+    norm = OAuth2Client._normalize_uri(uri)
+    for client in OAuth2Client.query.filter_by(is_active=True).all():
+        for r in (client.redirect_uris or []):
+            if OAuth2Client._normalize_uri(r) == norm:
+                return True
+    return False
+
 
 @oauth2_bp.route('/callback')
 def debug_callback():

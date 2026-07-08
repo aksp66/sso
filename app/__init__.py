@@ -1,5 +1,6 @@
 import os
-from flask import Flask, jsonify, render_template, request
+import time
+from flask import Flask, jsonify, render_template, request, session
 from config import config
 from .extensions import (
     bcrypt,
@@ -101,6 +102,9 @@ def create_app(config_name: str | None = None) -> Flask:
     from .routes.admin import admin_bp
     app.register_blueprint(admin_bp)
 
+    # ── Middleware de session SSO (sliding timeout + absolu) ──────────────
+    _configure_session_middleware(app)
+
     # ── En-têtes de sécurité HTTP ─────────────────────────────────────────
     _configure_security_headers(app)
 
@@ -154,6 +158,84 @@ def _bootstrap_admin(app: Flask) -> None:
         db.session.add(admin)
         db.session.commit()
         app.logger.info(f"Bootstrap : compte admin créé ({email})")
+
+
+def _configure_session_middleware(app: Flask) -> None:
+    """
+    Deux niveaux de timeout SSO (RFC recommandations IdP) :
+      - Idle (sliding) : IDP_SESSION_IDLE_SECONDS (défaut 8 h)
+        La session se renouvelle à chaque requête active.
+      - Absolu        : IDP_SESSION_ABSOLUTE_SECONDS (défaut 12 h)
+        Même un utilisateur actif est déconnecté après cette durée.
+    """
+    # Points d'entrée sans session utilisateur (on ne touche pas à leurs sessions)
+    _NO_CHECK_ENDPOINTS = frozenset({'static', 'health.ping'})
+    # Routes OAuth2 pures (API machine-à-machine) qui n'ont pas de session IdP
+    _OAUTH2_API_ENDPOINTS = frozenset({
+        'oauth2.token', 'oauth2.jwks', 'oauth2.userinfo',
+        'oauth2.revoke', 'oauth2.openid_config',
+    })
+
+    @app.before_request
+    def enforce_session_lifetime():
+        if request.endpoint in _NO_CHECK_ENDPOINTS:
+            return
+        if request.endpoint in _OAUTH2_API_ENDPOINTS:
+            return
+
+        user_id = session.get('user_id')
+        if not user_id:
+            return  # Non connecté, rien à vérifier
+
+        now = time.time()
+        idle_limit = app.config.get('IDP_SESSION_IDLE_SECONDS', 8 * 3600)
+        absolute_limit = app.config.get('IDP_SESSION_ABSOLUTE_SECONDS', 12 * 3600)
+
+        last_activity = session.get('last_activity', now)
+        session_start = session.get('session_created_at', now)
+
+        expired_idle = (now - last_activity) > idle_limit
+        expired_abs  = (now - session_start) > absolute_limit
+
+        if expired_idle or expired_abs:
+            reason = 'idle' if expired_idle else 'absolute'
+            # Supprimer la session Redis si elle existe
+            sid = session.get('session_id')
+            if sid:
+                try:
+                    from app.services.session_service import delete_user_session
+                    delete_user_session(sid)
+                except Exception:
+                    pass
+            # Audit (best effort)
+            try:
+                uid_str = session.get('user_id')
+                import uuid as _uuid
+                from app.models.audit_log import AuditLog, EVENT_SESSION_EXPIRED
+                AuditLog.log(
+                    event_type=EVENT_SESSION_EXPIRED,
+                    ip_address=request.remote_addr,
+                    user_id=_uuid.UUID(uid_str) if uid_str else None,
+                    user_agent=request.user_agent.string,
+                    details={'reason': reason},
+                )
+            except Exception:
+                pass
+            session.clear()
+            return  # Le garde de la route redirigera vers /login
+
+        # Mise à jour sliding (last_activity seulement)
+        session['last_activity'] = now
+        # session_created_at ne change jamais — c'est le timestamp de création
+
+        # Rafraîchissement de la session Redis
+        sid = session.get('session_id')
+        if sid:
+            try:
+                from app.services.session_service import refresh_user_session
+                refresh_user_session(sid)
+            except Exception:
+                pass
 
 
 def _configure_security_headers(app: Flask) -> None:

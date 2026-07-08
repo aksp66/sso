@@ -87,6 +87,12 @@ class OAuth2Client(db.Model):
     logo_uri: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, comment="URL du logo (page de consentement)"
     )
+    backchannel_logout_uri: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="URI de déconnexion back-channel (OIDC SLO — RFC 9470)"
+    )
+    frontchannel_logout_uri: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="URI de déconnexion front-channel (OIDC SLO)"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

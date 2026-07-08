@@ -45,6 +45,8 @@ EVENT_ADMIN_USER_UPDATED = "admin_user_updated"
 EVENT_ADMIN_USER_DELETED = "admin_user_deleted"
 EVENT_ACCOUNT_REGISTERED = "account_registered"
 EVENT_EMAIL_VERIFIED = "email_verified"
+EVENT_SESSION_EXPIRED = "session_expired"
+EVENT_SLO_LOGOUT = "slo_logout"
 
 
 class AuditLog(db.Model):
