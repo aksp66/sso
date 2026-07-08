@@ -49,21 +49,27 @@ def enroll():
         flash('Code TOTP invalide.', 'danger')
         return redirect(url_for('twofa.setup'))
     # Activer 2FA
-    aes_key = current_app.config['AES_ENCRYPTION_KEY']
-    encrypted_secret = TOTPService.encrypt_secret(secret, aes_key)
-    user.totp_secret = encrypted_secret
-    user.totp_enabled = True
-    # Générer et stocker les codes de secours hachés
-    backup_codes = TOTPService.generate_backup_codes()
-    hashed_backup = TOTPService.hash_backup_codes(backup_codes)
-    user.backup_codes = hashed_backup
-    AuditLog.log(
-        event_type=EVENT_2FA_ENABLED,
-        ip_address=request.remote_addr,
-        user_id=user.id,
-        user_agent=request.user_agent.string,
-    )
-    db.session.commit()
+    try:
+        aes_key = current_app.config['AES_ENCRYPTION_KEY']
+        encrypted_secret = TOTPService.encrypt_secret(secret, aes_key)
+        user.totp_secret = encrypted_secret
+        user.totp_enabled = True
+        # Générer et stocker les codes de secours hachés
+        backup_codes = TOTPService.generate_backup_codes()
+        hashed_backup = TOTPService.hash_backup_codes(backup_codes)
+        user.backup_codes = hashed_backup
+        AuditLog.log(
+            event_type=EVENT_2FA_ENABLED,
+            ip_address=request.remote_addr,
+            user_id=user.id,
+            user_agent=request.user_agent.string,
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Erreur activation 2FA : %s", exc)
+        flash('Une erreur est survenue lors de l\'activation de la 2FA. Veuillez réessayer.', 'danger')
+        return redirect(url_for('twofa.setup'))
     # Afficher les codes de secours une seule fois
     session['backup_codes'] = backup_codes
     session.pop('totp_temp_secret', None)

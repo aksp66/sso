@@ -54,5 +54,11 @@ class TOTPService:
 
     @staticmethod
     def hash_backup_codes(codes: list) -> list:
-        from app.extensions import bcrypt
-        return [bcrypt.generate_password_hash(code).decode('utf-8') for code in codes]
+        # Backup codes have 96-bit entropy — brute-force is infeasible regardless
+        # of bcrypt rounds, so we use rounds=4 to avoid gunicorn timeouts on
+        # slow shared CPUs (10× rounds=12 hashes can exceed the 30s worker timeout).
+        import bcrypt as _bcrypt
+        return [
+            _bcrypt.hashpw(code.encode(), _bcrypt.gensalt(rounds=4)).decode('utf-8')
+            for code in codes
+        ]

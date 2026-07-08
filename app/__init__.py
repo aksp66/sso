@@ -207,7 +207,7 @@ def _configure_session_middleware(app: Flask) -> None:
                     delete_user_session(sid)
                 except Exception:
                     pass
-            # Audit (best effort)
+            # Audit (best effort — commit séparé pour ne pas polluer la transaction de la route)
             try:
                 uid_str = session.get('user_id')
                 import uuid as _uuid
@@ -219,8 +219,9 @@ def _configure_session_middleware(app: Flask) -> None:
                     user_agent=request.user_agent.string,
                     details={'reason': reason},
                 )
+                db.session.commit()
             except Exception:
-                pass
+                db.session.rollback()
             session.clear()
             return  # Le garde de la route redirigera vers /login
 

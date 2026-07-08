@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, abort, request, redirect, url_for, flash
+from flask import Blueprint, render_template, abort, request, redirect, url_for, flash, Response
 from app.extensions import db, limiter
 from app.models.client_request import ClientRequest
 
@@ -22,6 +22,16 @@ HELP_DOCS = [
     ('applications-connectees', 'Applications connectées'),
     ('faq', 'Questions fréquentes'),
 ]
+
+
+@public_bp.route('/service-worker.js')
+def service_worker():
+    """No-op service worker — supprime les 404 générés par les navigateurs PWA."""
+    return Response(
+        "// Nexus — service worker stub\nself.addEventListener('install', () => self.skipWaiting());\n",
+        mimetype='application/javascript',
+        headers={'Service-Worker-Allowed': '/'},
+    )
 
 
 @public_bp.route('/')
