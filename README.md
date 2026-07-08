@@ -2,7 +2,7 @@
 
 Serveur d'authentification unique (Single Sign-On) conforme OAuth 2.0, OpenID Connect et PKCE, développé en Flask 3.x avec PostgreSQL, Redis et RS256 JWT.
 
-**Auteurs :** AKSP, KOYE Leleda Mabelle
+**Auteurs :** AHLI Pédro, KOYE Leleda Mabelle
 **Superviseur :** M. TCHAYE (<tchaye59@gmail.com>)
 **Lieu / date :** Sanguéra, Togo — Juin 2026
 
@@ -17,11 +17,12 @@ Serveur d'authentification unique (Single Sign-On) conforme OAuth 2.0, OpenID Co
 5. [Variables d'environnement](#variables-denvironnement)
 6. [Référence API](#référence-api)
 7. [Flux d'authentification](#flux-dauthentification)
-8. [Sécurité](#sécurité)
-9. [Administration](#administration)
-10. [Tests](#tests)
-11. [Déploiement en production](#déploiement-en-production)
-12. [Monitoring](#monitoring)
+8. [Gestion des sessions SSO](#gestion-des-sessions-sso)
+9. [Sécurité](#sécurité)
+10. [Administration](#administration)
+11. [Tests](#tests)
+12. [Déploiement en production](#déploiement-en-production)
+13. [Monitoring](#monitoring)
 
 ---
 
@@ -62,15 +63,16 @@ Serveur d'authentification unique (Single Sign-On) conforme OAuth 2.0, OpenID Co
 
 | Composant | Rôle |
 |---|---|
-| `app/routes/auth.py` | Login, logout, profil, paramètres (username / e-mail / mot de passe), reset mot de passe |
-| `app/routes/oauth2.py` | Flux OAuth2 : `/authorize`, `/token`, `/userinfo`, `/revoke`, `/jwks.json` |
+| `app/routes/auth.py` | Login, logout, profil, paramètres self-service (username / e-mail / mot de passe), actions admin depuis dashboard unifié |
+| `app/routes/oauth2.py` | Flux OAuth2 : `/authorize` (prompt, max_age), `/token`, `/userinfo`, `/revoke`, `/jwks.json`, `/connect/end_session` (SLO) |
 | `app/routes/twofa.py` | Enrollment TOTP, vérification, codes de secours |
-| `app/routes/admin.py` | CRUD utilisateurs, clients OAuth2, journal d'audit |
+| `app/routes/admin.py` | CRUD utilisateurs, clients OAuth2, demandes client, journal d'audit |
 | `app/routes/health.py` | `/health` et `/` |
 | `app/services/key_service.py` | Génération / rotation RS256, chiffrement AES-256-GCM |
+| `app/services/session_service.py` | Création, rafraîchissement, suppression des sessions Redis ; sliding timeout IdP |
 | `app/services/totp_service.py` | TOTP RFC 6238, QR code, backup codes bcrypt |
-| `app/services/email_service.py` | Envoi SMTP : vérification compte, reset mot de passe, changement d'e-mail, identifiants client OAuth2 |
-| `app/models/` | SQLAlchemy 2.0 : User (avec profil étendu), OAuth2Client, OAuth2Token, AuditLog, RS256Key, OAuth2Consent |
+| `app/services/email_service.py` | Envoi SMTP : vérification compte, reset mot de passe, changement d'e-mail, identifiants client OAuth2, rejet de demande |
+| `app/models/` | SQLAlchemy 2.0 : User (profil étendu), OAuth2Client (logout URIs SLO), OAuth2Token, AuditLog, RS256Key, OAuth2Consent, ClientRequest |
 
 ---
 
@@ -143,14 +145,16 @@ flask run --port 8000
 | `REDIS_URL` | ✅ | URI Redis | `redis://localhost:6379/0` |
 | `SSO_ISSUER` | ✅ | URL publique du SSO (dans les JWT) | `https://sso.example.com` |
 | `FLASK_ENV` | — | `production` / `development` / `testing` | `production` |
-| `SMTP_HOST` | — | Hôte SMTP (reset mot de passe) | `smtp.sendgrid.net` |
+| `SMTP_HOST` | — | Hôte SMTP (reset mot de passe, changement e-mail) | `smtp.sendgrid.net` |
 | `SMTP_PORT` | — | Port SMTP | `587` |
 | `SMTP_USER` | — | Identifiant SMTP | `apikey` |
 | `SMTP_PASS` | — | Mot de passe SMTP | `SG.xxx` |
 | `SMTP_FROM` | — | Adresse d'expédition | `no-reply@sso.example.com` |
 | `BCRYPT_LOG_ROUNDS` | — | Coût bcrypt (défaut : 12) | `12` |
-| `ACCESS_TOKEN_EXPIRE_SECONDS` | — | Durée de vie access token (défaut : 3600) | `3600` |
+| `ACCESS_TOKEN_EXPIRE_SECONDS` | — | Durée de vie access token (défaut : 3 600 s) | `3600` |
 | `REFRESH_TOKEN_EXPIRE_SECONDS` | — | Durée de vie refresh token (défaut : 30 jours) | `2592000` |
+| `IDP_SESSION_IDLE_SECONDS` | — | Timeout d'inactivité IdP — sliding (défaut : 8 h) | `28800` |
+| `IDP_SESSION_ABSOLUTE_SECONDS` | — | Timeout absolu IdP (défaut : 12 h) | `43200` |
 | `ADMIN_BOOTSTRAP_EMAIL` | — | E-mail du premier admin (bootstrap au démarrage) | `admin@example.com` |
 | `ADMIN_BOOTSTRAP_USERNAME` | — | Nom d'utilisateur du premier admin | `admin` |
 | `ADMIN_BOOTSTRAP_PASSWORD` | — | Mot de passe du premier admin (**supprimer après le 1er démarrage**) | — |
@@ -175,8 +179,13 @@ Métadonnées OpenID Connect (issuer, endpoints, algorithmes supportés).
   "userinfo_endpoint": "https://sso.example.com/userinfo",
   "jwks_uri": "https://sso.example.com/jwks.json",
   "revocation_endpoint": "https://sso.example.com/revoke",
+  "end_session_endpoint": "https://sso.example.com/connect/end_session",
   "response_types_supported": ["code"],
-  "id_token_signing_alg_values_supported": ["RS256"]
+  "id_token_signing_alg_values_supported": ["RS256"],
+  "prompt_values_supported": ["login", "none"],
+  "backchannel_logout_supported": true,
+  "backchannel_logout_session_supported": true,
+  "frontchannel_logout_supported": true
 }
 ```
 
@@ -200,9 +209,12 @@ Clés publiques RS256 actives au format JWK Set.
 | `code_challenge` | Requis pour clients publics | Hash PKCE SHA-256 (RFC 7636) |
 | `code_challenge_method` | Si PKCE | Doit être `S256` |
 | `nonce` | — | Protection replay pour l'ID token |
+| `prompt` | — | `login` : forcer re-auth même si session active · `none` : erreur si non connecté (OIDC Core §3.1.2.1) |
+| `max_age` | — | Durée (en secondes) depuis laquelle la session IdP est acceptée sans re-auth |
 
 **Réponse (succès) :** redirection vers `redirect_uri?code=<code>&state=<state>`  
-**Réponse (refus) :** redirection vers `redirect_uri?error=access_denied`
+**Réponse (refus) :** redirection vers `redirect_uri?error=access_denied`  
+**Réponse (`prompt=none`, non connecté) :** `redirect_uri?error=login_required`
 
 ---
 
@@ -283,6 +295,31 @@ token=<valeur>
 
 ---
 
+### Déconnexion globale (SLO)
+
+#### `GET|POST /connect/end_session`
+
+Point de déconnexion OIDC RP-Initiated Logout (RFC 9470). Déconnecte l'utilisateur de Nexus **et** notifie toutes les applications clientes actives via back-channel logout.
+
+| Paramètre | Description |
+| --- | --- |
+| `id_token_hint` | ID token JWT de la session en cours (optionnel, identifie le client initiateur) |
+| `post_logout_redirect_uri` | URI de retour après déconnexion (doit correspondre à une `redirect_uri` enregistrée) |
+| `state` | Valeur reprise dans la redirection finale |
+
+**Comportement :**
+
+1. Révoque tous les refresh tokens actifs de l'utilisateur en base.
+2. Pour chaque client possédant une `backchannel_logout_uri` enregistrée, envoie un **logout token JWT RS256** signé par Nexus (claim `events: {"http://schemas.openid.net/event/backchannel-logout": {}}`).
+3. Supprime la session Redis de l'utilisateur.
+4. Redirige vers `post_logout_redirect_uri` (si valide) ou affiche la page de confirmation.
+
+**Enregistrer une URI de logout sur un client :**
+
+Le champ `backchannel_logout_uri` peut être renseigné lors de la création du client dans l'interface d'administration (`/admin/clients/new`) ou via le panneau Nexus Services des paramètres.
+
+---
+
 ### Santé
 
 #### `GET /health`
@@ -301,6 +338,61 @@ token=<valeur>
 ```
 
 HTTP 200 si tous les composants sont opérationnels, 503 sinon.
+
+---
+
+## Gestion des sessions SSO
+
+Nexus implémente deux niveaux de timeout distincts, conformément aux recommandations pour les environnements SSO.
+
+### Deux niveaux de timeout
+
+| Niveau | Variable | Défaut | Comportement |
+| --- | --- | --- | --- |
+| **Idle (sliding)** IdP | `IDP_SESSION_IDLE_SECONDS` | 8 h | La session IdP se renouvelle à chaque requête. Expiration si aucune activité pendant la durée configurée. |
+| **Absolu** IdP | `IDP_SESSION_ABSOLUTE_SECONDS` | 12 h | L'utilisateur est déconnecté de l'ensemble du SSO après 12 h, quelle que soit son activité. |
+| **Local** SP | géré par l'application cliente | — | L'application peut utiliser `max_age` pour forcer une re-auth si sa propre session locale a expiré. La session IdP étant toujours active, la re-auth est transparente. |
+
+Le middleware `before_request` vérifie à chaque requête authentifiée les deux compteurs, met à jour `last_activity` (sliding), et rafraîchit la clé Redis correspondante. En cas d'expiration, l'événement `session_expired` est enregistré dans `audit_logs`.
+
+### Re-authentification forcée (actions sensibles)
+
+Les applications clientes peuvent demander une re-authentification explicite sans attendre l'expiration de la session :
+
+```
+GET /authorize?client_id=...&prompt=login&...
+```
+
+Pour les actions très sensibles (validation d'un virement, accès aux clés API), utilisez `max_age=0` pour exiger une authentification fraîche :
+
+```
+GET /authorize?client_id=...&max_age=0&...
+```
+
+### Single Log-Out (SLO)
+
+Lorsque l'utilisateur se déconnecte depuis l'IdP ou depuis une application cliente via `POST /connect/end_session` :
+
+1. Tous les refresh tokens actifs sont révoqués en base de données.
+2. Un **logout token JWT RS256** est envoyé en back-channel (HTTP POST) à chaque application ayant enregistré une `backchannel_logout_uri`.
+3. La session Redis est supprimée immédiatement.
+4. L'événement `slo_logout` est enregistré dans `audit_logs`.
+
+**Configurer le back-channel logout sur une application cliente :**
+
+Lors de l'enregistrement du client dans `/admin/clients/new` ou dans le panneau Nexus Services, renseignez `backchannel_logout_uri` avec l'endpoint de votre application. Nexus enverra un JWT signé contenant :
+
+```json
+{
+  "iss": "https://sso.example.com",
+  "aud": "<client_id>",
+  "sub": "<user_uuid>",
+  "sid": "<session_id>",
+  "events": { "http://schemas.openid.net/event/backchannel-logout": {} }
+}
+```
+
+Votre application doit alors invalider toute session locale liée à ce `sub`.
 
 ---
 
@@ -347,7 +439,7 @@ Après validation du mot de passe, si `totp_enabled = true` :
 |---|---|
 | Mots de passe | bcrypt (coût 12) |
 | Secrets TOTP | AES-256-GCM (clé depuis `AES_ENCRYPTION_KEY`) |
-| Sessions | Redis, ID = `secrets.token_urlsafe(32)` |
+| Sessions | Redis, ID = `secrets.token_urlsafe(32)`, sliding timeout 8 h + absolu 12 h |
 | JWT | RS256, rotation 90 jours, blacklist Redis (JTI) |
 | Refresh tokens | bcrypt hash + SHA-256 index O(1) |
 | Brute-force | Lockout après 10 échecs, durée 15 min |
@@ -358,12 +450,14 @@ Après validation du mot de passe, si `totp_enabled = true` :
 | Headers HTTP | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
 | Audit | Table `audit_logs` — tous les événements de sécurité |
 | URI redirect | Normalisation `urlparse` (évite les contournements) |
+| Re-auth forcée | `prompt=login`, `prompt=none`, `max_age` (OIDC Core §3.1.2.1) |
+| SLO | Back-channel logout JWT RS256 vers toutes les applications clientes actives |
 
 ### Journal d'audit
 
 Les événements suivants sont automatiquement enregistrés dans `audit_logs` :
 
-`login_success`, `login_failure`, `account_locked`, `logout`, `2fa_enabled`, `2fa_failure`, `backup_code_used`, `token_issued`, `token_refresh`, `token_revoked`, `consent_granted`, `password_reset`, `password_changed`, `email_verified`
+`login_success`, `login_failure`, `account_locked`, `logout`, `2fa_enabled`, `2fa_failure`, `backup_code_used`, `token_issued`, `token_refresh`, `token_revoked`, `consent_granted`, `password_reset`, `password_changed`, `email_verified`, `session_expired`, `slo_logout`
 
 ---
 
@@ -383,14 +477,31 @@ ADMIN_BOOTSTRAP_PASSWORD=MotDePasseFort!
 
 Si un compte avec cet e-mail existe déjà mais n'est pas admin, il est promu. Supprimer ces trois variables après le premier démarrage réussi.
 
+#### Interface d'administration dédiée (`/admin`)
+
 | Route | Description |
 |---|---|
 | `GET /admin/users` | Liste paginée des utilisateurs |
 | `GET/POST /admin/users/<id>/edit` | Modifier un compte (rôle, statut) |
 | `POST /admin/users/<id>/reset-2fa` | Réinitialiser la 2FA d'un utilisateur |
 | `GET /admin/clients` | Liste des clients OAuth2 |
-| `GET/POST /admin/clients/new` | Enregistrer un nouveau client |
+| `GET/POST /admin/clients/new` | Enregistrer un nouveau client (avec `backchannel_logout_uri`) |
+| `GET /admin/client-requests` | Demandes d'enregistrement en attente |
+| `POST /admin/client-requests/<id>/approve` | Approuver et envoyer les identifiants par e-mail |
+| `POST /admin/client-requests/<id>/reject` | Rejeter une demande |
 | `GET /admin/audit-logs` | Journal d'audit paginé |
+
+#### Dashboard unifié Nexus Services (`/profile/edit#nexus`)
+
+Les mêmes actions sont accessibles depuis le panneau **Nexus Services** dans les paramètres de l'administrateur sans quitter l'interface utilisateur :
+
+| Action | Cible |
+|---|---|
+| Activer / Désactiver | Utilisateur, Application cliente |
+| Réinitialiser 2FA | Utilisateur |
+| Promouvoir / Rétrograder admin | Utilisateur |
+| Approuver / Rejeter (avec motif) | Demande d'application |
+| Journal d'audit (60 derniers) | Lien vers vue complète |
 
 ---
 
